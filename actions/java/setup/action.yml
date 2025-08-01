@@ -1,0 +1,51 @@
+name: setup java
+description: install java and prepare cache and settings
+
+inputs:
+  branch:
+    required: false
+    description: branch name use to cache repository
+    default: ''
+  java:
+    required: false
+    default: '25'
+    description: java version
+  artifactory-user:
+    required: false
+    default: ''
+    description: user artifactory
+  artifactory-password:
+    required: false
+    default: ''
+    description: artifactory password
+  artifactory-url:
+    required: false
+    default: 'http://jfrog'
+    description: artifactory url do you want to connect
+
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ inputs.java }}
+        distribution: 'adopt'
+    - name: add configuration maven to connect at jfrog
+      uses: pmeig/github-actions/actions/java/setup/settings@main
+      if: ${{ inputs.artifactory-user != '' && inputs.artifactory-password != '' }}
+      with:
+        artifactory-user: ${{ inputs.artifactory-user }}
+        artifactory-password: ${{ inputs.artifactory-password }}
+        artifactory-url: ${{ inputs.artifactory-url }}
+    - name: path repository
+      id: repository
+      shell: bash
+      run: |
+        path=$(mvn -s "~/.m2/settings.xml" -B help:evaluate -Dexpression=settings.localRepository -q -DforceStdout)
+        echo "path=$path" >> $GITHUB_OUTPUT
+    - name: cache repository
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.repository.outputs.path }}
+        key: mvn-${{ inputs.branch }}

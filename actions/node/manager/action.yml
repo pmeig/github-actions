@@ -1,0 +1,29 @@
+name: node manager
+description: interpret manager use on project (npm/pnpm/yarn)
+
+outputs:
+  value:
+    value: ${{ steps.yarn.outputs.value }}${{ steps.pnpm.outputs.value }}${{ steps.npm.outputs.value }}
+    description: return
+
+runs:
+  using: composite
+  steps:
+    - name: pnpm
+      id: pnpm
+      shell: bash
+      if: ${{ hashFiles('**/pnpm-workspace') != '' }}
+      run: |
+        echo value=pnpm >> $GITHUB_OUTPUT
+    - name: yarn
+      id: yarn
+      shell: bash
+      if: ${{ steps.pnpm.outputs.value == '' && hashFiles('**/yarn.lock') == '' }}
+      run: |
+        echo value=yarn >> $GITHUB_OUTPUT
+    - name: npm
+      id: npm
+      shell: bash
+      if: ${{ steps.pnpm.outputs.value == '' && steps.yarn.outputs.value == '' }}
+      run: |
+        echo value=npm >> $GITHUB_OUTPUT

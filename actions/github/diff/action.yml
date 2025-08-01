@@ -1,0 +1,103 @@
+name: find files modified
+description: find all files modified
+
+inputs:
+  parent:
+    description: only parent
+    required: false
+    default: 'false'
+  includes:
+    description: "filter format start=<starter> end=<end> contains=<contains>"
+    default: ''
+    required: false
+  excludes:
+    description: "filter format start=<starter> end=<end> contains=<contains>"
+    default: ''
+    required: false
+
+outputs:
+  files:
+    value: ${{ steps.excludes.outputs.value }}
+    description: all files modify
+  parents:
+    value: ${{ steps.parents.outputs.path }}
+    description: all parents files modify
+  current:
+    value: ${{ steps.parents.outputs.origin }}
+    description: is current folder modify
+
+runs:
+  using: composite
+  steps:
+    - name: get branch
+      id: branch
+      if: ${{ startsWith(github.event_name, 'pull_request') }}
+      uses: pmeig/github-actions/actions/github/branch@main
+    - name: checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        path: tmp
+    - name: find files
+      id: files
+      shell: bash
+      working-directory: tmp
+      run: |
+        files=''
+        from='HEAD^1'
+        to='HEAD'
+        if [[ '${{ github.event_name }}' = "pull_request"* ]]
+        then
+          from='origin/${{ steps.branch.outputs.target }}'
+          git fetch origin ${{ steps.branch.outputs.target }}
+        fi
+        for name in $(git diff --name-only "$from" "$to" )
+        do
+          files="$name $files"
+        done
+        echo "path=$(echo $files)" >> $GITHUB_OUTPUT
+    - name: apply includes
+      id: includes
+      uses: pmeig/github-actions/actions/github/diff/filter@main
+      with:
+        files: ${{ steps.files.outputs.path }}
+        filter: ${{ inputs.includes }}
+    - name: apply excludes
+      id: excludes
+      uses: pmeig/github-actions/actions/github/diff/filter@main
+      with:
+        files: ${{ steps.includes.outputs.value }}
+        filter: ${{ inputs.excludes }}
+        accept: false
+    - name: find parent files
+      if: ${{ inputs.parent == 'true' }}
+      id: parents
+      shell: bash
+      run: |
+        parents=' '
+        origin='false'
+        for name in $(echo "${{ steps.excludes.outputs.value }}")
+        do
+          if [[ "$name" == *"/"* ]]
+          then
+            parent=$(echo "$name" | cut -d'/' -f1)
+            if [ "$parent" == 'src' ]
+            then
+              origin=true
+            else
+              if [ "$parent" != ".github" ] && [[ "$parents" != *" $parent "* ]]
+              then
+                parents="$parents$parent "
+              fi
+            fi
+          else
+            origin=true
+          fi
+        done
+        parents=$(echo $parents)
+        echo "path=$parents" >> $GITHUB_OUTPUT
+        echo "origin=$origin" >> $GITHUB_OUTPUT
+    - name: clean diff
+      shell: bash
+      run: |
+        rm -rf tmp

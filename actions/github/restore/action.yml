@@ -1,0 +1,39 @@
+name: restore branch
+description: restore branch if needed
+
+inputs:
+  current:
+    required: true
+    description: name of the current branch
+  target:
+    required: true
+    description: name of the target branch
+
+outputs:
+  branch:
+    value: ${{ steps.needRestore.outputs.branch }}
+    description: branch to restore
+
+runs:
+    using: composite
+    steps:
+      - name: need restore branch
+        id: needRestore
+        shell: bash
+        run: |
+          branch=""
+          if [[ '${{ inputs.target }}' == "release" ]]
+          then
+            if [[ '${{ inputs.current }}' == "main" ]] || [[ '${{ inputs.current }}' == "bugfix"* ]] || [[ '${{ inputs.current }}' == 'fix'* ]] 
+            then
+              branch="develop"
+            fi
+          fi
+          if [[ '${{ inputs.target }}' == "main" ]]
+          then
+            if [[ '${{ inputs.current }}' == "hotfix"* ]]
+            then
+              branch="release"
+            fi
+          fi
+          echo branch=$branch >> $GITHUB_OUTPUT

@@ -1,0 +1,39 @@
+name: update settings
+description: 'update settings maven'
+
+inputs:
+  artifactory-user:
+    required: true
+    description: 'user to connect at jfrog'
+  artifactory-password:
+    required: true
+    description: 'password to connect at jfrog'
+  artifactory-url:
+    required: true
+    description: url artifactory do you want connect
+
+runs:
+  using: composite
+  steps:
+    - name: prepare config servers settings maven
+      shell: bash
+      id: settings
+      run: |
+        echo "JFROG_USER=${{inputs.artifactory-user}}" >> $GITHUB_ENV
+        echo "JFROG_PASSWORD=${{inputs.artifactory-password}}" >> $GITHUB_ENV
+        server="<server><id>pmeig-artifactory-@env@</id><username>\${env.JFROG_USER}</username><password>\${env.JFROG_PASSWORD}</password></server>"
+        servers="<servers>${server//@env@/releases}${server//@env@/snapshots}${server//@env@/mirror}</servers>"
+        id="pmeig-artifactory"
+        enable="<@env@><enabled>true</enabled></@env@>"
+        repository="<@prefix@epositories><@prefix@epository><id>pmeig-artifactory-mirror</id><name>Pmeig Artifactory Mirror Repository</name><url>${{ inputs.artifactory-url }}</url>${enable//@env@/releases}${enable//@env@/snapshots}</@prefix@epository></@prefix@epositories>"
+        profiles="<profiles><profile><id>$id</id>${repository//@prefix@/r}${repository//@prefix@/pluginR}</profile></profiles><activeProfiles><activeProfile>$id</activeProfile></activeProfiles>"
+        echo "servers=${servers}" >> $GITHUB_OUTPUT
+        echo "profiles=${profiles}" >> $GITHUB_OUTPUT
+    - name: create maven settings
+      shell: bash
+      run: |
+        servers='${{steps.settings.outputs.servers}}'
+        profiles='${{steps.settings.outputs.profiles}}'
+        mirrors='<mirrors><mirror><id>pmeig-artifactory-mirror</id><name>Pmeig Artifactory AllInOne Repositories Mirror</name><url>${{ inputs.artifactory-url }}</url><mirrorOf>pmeig-artifactory-*</mirrorOf></mirror></mirrors>'
+        schemaLocation="http://maven.apache.org/SETTINGS/1.1.0 http://maven.apache.org/xsd/settings-1.1.0.xsd"
+        echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?><settings xsi:schemaLocation=\"$schemaLocation\" xmlns=\"http://maven.apache.org/SETTINGS/1.1.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">$servers$profiles$mirrors</settings>" > ~/.m2/settings.xml

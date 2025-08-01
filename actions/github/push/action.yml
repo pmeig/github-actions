@@ -1,0 +1,33 @@
+name: git push
+description: 'push current brush'
+inputs:
+  user:
+    description: 'user git'
+    required: false
+    default: 'github action'
+  mail:
+    default: 'github.action@service.adeo.com'
+    required: false
+    description: 'mail of user push'
+  commit:
+    description: 'commit message'
+    required: true
+  stage:
+    required: true
+    description: 'files staging separate by space'
+
+runs:
+  using: composite
+  steps:
+    - name: push
+      shell: bash
+      run: |
+        if [ -z "$(git status | grep 'nothing to commit')" ]
+        then
+          git config --global user.name "${{ inputs.user }}"
+          git config --global user.email "${{ inputs.mail }}"
+          git fetch
+          git stage ${{ inputs.stage }}
+          git commit -m "${{ inputs.commit }}"
+          git push
+        fi

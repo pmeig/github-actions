@@ -1,0 +1,31 @@
+name: get latest release
+description: 'get latest release'
+inputs:
+  api_version:
+    required: false
+    description: "api version"
+    default: "2022-11-28"
+  accept:
+    required: false
+    default: "application/vnd.github+json"
+    description: "accept"
+
+outputs:
+  releaseName:
+    value: ${{ steps.release.outputs.releaseName }}
+    description: latest release name
+
+runs:
+  using: composite
+  steps:
+    - name: release
+      id: release
+      shell: bash
+      run: |
+        release=$(curl -L \
+            -H "Accept: ${{ inputs.accept }}" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: ${{ inputs.api_version }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/latest)
+        releaseName=$(echo $release | jq '.tag_name')
+        echo "releaseName=$releaseName" >> $GITHUB_OUTPUT

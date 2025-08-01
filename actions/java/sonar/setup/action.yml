@@ -1,0 +1,39 @@
+name: setup sonar
+description: prepare maven project to sonar
+
+inputs:
+  coverage-exclusions:
+    default: ''
+    description: excludes coverage items
+    required: false
+  quality:
+    required: false
+    default: 'true'
+    description: wait quality result
+
+
+  workspace:
+    required: false
+    default: '.'
+    description: working-directory
+
+outputs:
+  jacoco-version:
+    value: ${{ steps.jacoco.outputs.version }}
+    description: latest version jacoco plugin
+
+runs:
+  using: composite
+  steps:
+    - name: jacoco
+      uses: pmeig/github-actions/actions/java/sonar/jacoco@main
+      id: jacoco
+      with:
+        workspace: ${{ inputs.workspace }}
+    - name: sonar-project.properties
+      uses: pmeig/github-actions/actions/java/sonar/properties@main
+      with:
+        workspace: ${{ inputs.workspace }}
+        coverage-exclusions: ${{ inputs.coverage-exclusions }}
+        quality: ${{ inputs.quality }}
+        

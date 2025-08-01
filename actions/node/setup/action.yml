@@ -1,0 +1,66 @@
+name: setup node
+description: prepare setup to node
+
+inputs:
+  version:
+    default: '22'
+    description: version node do you want to setup
+    required: false
+  branch:
+    description: ''
+
+
+  artifactory-user:
+    description: user use to connect at jfrog
+    required: false
+    default: ""
+  artifactory-password:
+    description: password use to connect at jfrog
+    required: false
+    default: ""
+  workspace:
+    default: '.'
+    required: false
+    description: location of node_modules
+
+outputs:
+  cache-path:
+    value: ${{ inputs.cache-path }}
+    description: where cache is install
+
+runs:
+  using: composite
+  steps:
+    - uses: pmeig/github-actions/actions/node/manager@main
+      id: manager
+    - name: Install pnpm
+      if: ${{ steps.manager.outputs.value == 'pnpm' }}
+      uses: pnpm/action-setup@v4
+    - name: Install pnpm
+      if: ${{ steps.manager.outputs.value == 'yarn' }}
+      shell: bash
+      run: |
+        npm i -g yarn
+    - uses: actions/setup-node@v4
+      id: setup-node-version
+      with:
+        node-version: ${{ inputs.version }}
+    - shell: bash
+      name: artifactory settings
+      if: ${{ (inputs.artifactory-user != '' && inputs.artifactory-password != '' }}
+      run: |
+        export AUTH=$(echo -n ${{ inputs.artifactory-user }}:${{ inputs.artifactory-password }} | base64 -w0)
+        echo "NODE_AUTH_TOKEN=$AUTH" >> $GITHUB_ENV
+
+        ${{ steps.manager.outputs.value }} config set registry=https://registry.npmjs.org/
+        ${{ steps.manager.outputs.value }} config set @pmeig:registry=${{ inputs.artifactory-url }}/artifactory/api/npm/npm/
+        {
+          echo //${{ inputs.artifactory-url }}/artifactory/api/npm/npm/:_auth=${AUTH}
+          echo //${{ inputs.artifactory-url }}/artifactory/api/npm/npm-snapshots/:_auth=${AUTH}
+          echo 'always-auth=true'
+        } >> ~/.npmrc
+    - name: cache node_modules
+      uses: actions/cache@v4
+      with:
+        key: ${{ steps.manager.outputs.value }}-${{ inputs.branch }}
+        path: ${{ inputs.workspace }}/node_modules

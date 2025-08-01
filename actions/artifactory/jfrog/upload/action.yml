@@ -1,0 +1,32 @@
+name: jfrog upload
+description: 'upload application in your artifactory'
+inputs:
+  artifactory:
+    description: 'name of your artifactory to want upload'
+    required: true
+  server-id:
+    description: 'id to use config'
+    required: false
+    default: 'adeo'
+  artifact:
+    description: 'your artifact you want upload'
+    required: true
+  pre-upload:
+    description: 'before upload execute bash script'
+    required: false
+    default: ''
+  workspace:
+    description: 'workspace to upload on jfrog artifactory'
+    default: '.'
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: push on jfrog with custom config
+      working-directory: ${{ inputs.workspace }}
+      shell: bash
+      run: |
+        ${{ inputs.pre-upload }}
+        find . -name '*maven-metadata-local.xml' -type f -delete
+        jfrog rt u --flat=false --recursive --server-id="${{ inputs.server-id }}" "${{ inputs.artifact }}" "${{ inputs.artifactory }}" 

@@ -1,0 +1,57 @@
+name: get artifactory
+description: get artifactory
+
+inputs:
+  env:
+    required: true
+    description: environment
+
+outputs:
+  maven:
+    value: ${{ steps.artifactory.outputs.maven }}
+    description: artifactory for maven
+  docker:
+    value: ${{ steps.artifactory.outputs.docker }}
+    description: artifactory for docker
+  docker-mirror:
+    value: ${{ steps.artifactory.outputs.dockerMirror }}
+    description: artifactory mirror
+  npm:
+    value: ${{ steps.artifactory.outputs.npm }}
+    description: artifactory for npm
+  generic:
+    value: ${{ steps.artifactory.outputs.generic }}
+    description: artifactory generic
+
+runs:
+  using: composite
+  steps:
+    - name: get artifactory
+      id: artifactory
+      shell: bash
+      run: |
+        npm=''
+        maven=''
+        docker=''
+        repository='${{  github.repository }}'
+        if [[ "$repository" == *"/"* ]]
+        then
+          repository=$(echo "$repository" | cut -d'/' -f2)
+        fi
+        dockerMirror="docker-$repository"
+        if [ '${{ inputs.env }}' = 'dev' ] || [ '${{ github.event_name }}' == 'workflow_dispatch' ]
+          then
+          maven="maven-snapshots-local"
+          docker="pmeig-${dockerMirror}-dev"
+          npm='npm-snapshots-local'
+        elif [ '${{ inputs.env }}' = 'prep' ] || [ '${{ inputs.env }}' = 'prod' ]
+        then
+          maven="maven-releases-local"
+          docker="pmeig-${dockerMirror}-release"
+          npm='npm-local'
+        fi
+        echo "maven=$maven" >> $GITHUB_OUTPUT
+        echo "docker=${docker}.jfrog.io" >> $GITHUB_OUTPUT
+        echo "dockerMirror=${dockerMirror}" >> $GITHUB_OUTPUT
+        echo "npm=$npm" >> $GITHUB_OUTPUT
+        echo "generic=generic-$repository" >> $GITHUB_OUTPUT

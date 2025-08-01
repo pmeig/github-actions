@@ -1,0 +1,102 @@
+name: get version
+description: find version by tag or in file (setup language before call)
+inputs:
+  env:
+    description: environment
+    required: true
+  version:
+    description: version do you want fix
+    required: false
+    default: ''
+  module:
+    description: module do you want take version
+    required: false
+    default: ''
+  workspace:
+    description: execute actions in this place
+    required: false
+    default: '.'
+
+outputs:
+  value:
+    value: ${{ steps.fragment.outputs.version }}
+    description: version without suffix
+  suffix:
+    value:
+    description: suffix use for environment
+  current-suffix:
+    value: ${{ steps.fragment.outputs.suffix }}
+    description: current suffix on version extracted
+  version:
+    value: ${{ steps.fragment.outputs.version }}${{ steps.fragment.outputs.suffix }}
+    description: current version with suffix
+  release:
+    value: ${{ steps.fragment.outputs.version }}${{ steps.release-suffix.outputs.value }}
+    description: version with suffix
+
+runs:
+  using: composite
+  steps:
+    - name: tag
+      id: tag
+      shell: bash
+      if: ${{ github.event_name != 'workflow_dispatch' && inputs.env != 'dev' && inputs.version == '' }}
+      run: |
+        if [[ "$GITHUB_REF" == *"/tags/"* ]]
+        then
+          tag=$(echo ${GITHUB_REF/refs\/tags\//})
+          tag=${tag:1:${#tag} - 1}
+          echo "version=$tag" >> $GITHUB_OUTPUT
+        fi
+    - uses: actions/checkout@v4
+      if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && hashFiles('**/pom.xml') == '' && hashFiles('**/package.json') == '' }}
+      name: checkout current project
+    - name: get version in pom
+      id: pom
+      if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && hashFiles('**/pom.xml') != '' }}
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        options=''
+        if [ -n '${{ inputs.module }}' ]
+        then
+          options='-pl :${{ inputs.module }}'
+        fi
+        version="$(mvn help:evaluate -Dexpression='project.version' -q -DforceStdout=true $options)"
+        echo "version=$version" >> $GITHUB_OUTPUT
+    - name: get version in package
+      id: node
+      if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && steps.pom.outputs.version == '' }}
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        echo "version=$(jq -rc '.version' package.json)" >> $GITHUB_OUTPUT
+    - name: input version
+      if: ${{ inputs.version != '' }}
+      shell: bash
+      id: version
+      run: |
+        echo 'version=${{ inputs.version }}' >> $GITHUB_OUTPUT
+    - name: split suffix and version
+      id: fragment
+      shell: bash
+      run: |
+        version='${{ steps.tag.outputs.version }}${{ steps.node.outputs.version }}${{ steps.pom.outputs.version }}${{ steps.version.outputs.version }}'
+        if [ -n "$version" ]
+        then
+          version=${version/-/@}
+          value=$(echo $version | cut -d'@' -f1)
+          suffix=$(echo $version | cut -d'@' -f2)
+          if [ -n "$suffix" ]
+          then
+            suffix="-$suffix"
+          fi
+          echo version=$value >> $GITHUB_OUTPUT
+          echo suffix=$suffix >> $GITHUB_OUTPUT
+        fi
+    - name: release suffix
+      id: release-suffix
+      uses: pmeig/github-actions/actions/context/version/suffix@main
+      with:
+        env: ${{ inputs.env }}
+

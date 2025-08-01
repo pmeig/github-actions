@@ -1,0 +1,60 @@
+name: semantic version upgrade
+description: apply semantic version on your version by type
+inputs:
+  version:
+    required: true
+    description: semantic version (major.minor.patch) do you want upgrade
+  type:
+    required: false
+    description: name part of semantic version upgrade (major/minor/patch
+    default: 'minor'
+
+outputs:
+  release:
+    value: ${{ steps.major.outputs.version }}${{ steps.minor.outputs.version }}${{ steps.patch.outputs.version }}${{ steps.variable.outputs.suffix }}
+    description: semantic version updated with suffix
+  version:
+    value: ${{ steps.major.outputs.version }}${{ steps.minor.outputs.version }}${{ steps.patch.outputs.version }}
+    description: semantic version upgraded
+  suffix:
+    value: ${{ steps.variable.outputs.suffix }}
+    description: suffix apply on version
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      name: variable
+      id: variable
+      run: |
+        echo "major=$(echo '${{ inputs.version }}' | cut -d'.' -f1)" >> $GITHUB_OUTPUT
+        patch=$(echo '${{ inputs.version }}' | cut -d'.' -f3)
+        patch=${patch/-/@}
+        suffix=$(echo patch | cut -d'@' -f2)
+        if [ -n "$suffix" ]
+        then
+          suffix="-$suffix"
+        fi
+        echo suffix=$suffix >> $GITHUB_OUTPUT
+        echo patch=$(echo patch | cut -d'@' -f1) >> $GITHUB_OUTPUT
+    - shell: bash
+      name: major
+      if: ${{ inputs.type == 'major' }}
+      id: major
+      run: |
+        echo "version=$((${{ steps.variable.outputs.major }} + 1)).0.0" >> $GITHUB_OUTPUT
+    - shell: bash
+      name: minor
+      if: ${{ inputs.type == 'minor' }}
+      id: minor
+      run: |
+        minor=$(echo '${{ inputs.version }}' | cut -d'.' -f2)
+        echo "version=${{ steps.variable.outputs.major }}.$(($minor + 1)).0" >> $GITHUB_OUTPUT
+    - shell: bash
+      name: patch
+      if: ${{ inputs.type == 'patch' }}
+      id: patch
+      run: |
+        minor=$(echo '${{ inputs.version }}' | cut -d'.' -f2)
+        patch='${{ steps.variable.outputs.patch }}'
+        echo "version=${{ steps.variable.outputs.major }}.$minor.$(( $patch + 1 ))" >> $GITHUB_OUTPUT

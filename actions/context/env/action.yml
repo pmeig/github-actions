@@ -1,0 +1,32 @@
+name: get env
+description: retrieve environment by branch
+inputs: 
+  branch:
+    description: branch name
+    required: true
+
+outputs:
+  value:
+    value: ${{ steps.env.outputs.value }}
+    description: environment execute cicd
+
+runs: 
+  using: composite
+  steps:
+    - name: retrieve env
+      id: env
+      shell: bash
+      run: |
+        env=''
+        if [ "${{ inputs.branch }}" == "develop" ] || [[  "${{ inputs.branch }}" == "feat"* ]]
+        then
+          env="dev"
+        elif [ "${{ inputs.branch }}" == "main" ] || [[  "${{ inputs.branch }}" == "hotfix/"* ]]
+        then
+         env="prod"
+        elif [ "${{ inputs.branch }}" == "release" ] || [[  "${{ inputs.branch }}" == "bug"* ]] || [[  "${{ inputs.branch }}" == "fix/"* ]]
+        then
+          env="prep"
+        fi
+        echo "value=$env" >> $GITHUB_OUTPUT
+  

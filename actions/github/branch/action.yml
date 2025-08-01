@@ -1,0 +1,42 @@
+name: get branch name
+description: retrieve branch where executed runner
+
+outputs:
+  current:
+    value: ${{ steps.branch-current.outputs.value }}${{ steps.branch-ref.outputs.value }}${{ steps.branch.outputs.value }}
+    description: name of the current branch
+  target:
+    value: ${{ steps.target-branch.outputs.value }}
+    description: name of the target branch
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      name: current branch name from pull request
+      id: branch-current
+      run: |
+        name='${{ github.head_ref }}'
+        echo "value=$name" >> $GITHUB_OUTPUT
+    - name: branch
+      id: branch-ref
+      if: ${{ steps.branch-current.outputs.value == '' }}
+      shell: bash
+      run: |
+        branch=$(echo "${{ github.event.base_ref }}")
+        echo value=${branch:11:$((${#branch} - 11))} >> $GITHUB_OUTPUT
+    - shell: bash
+      id: branch
+      if: ${{ steps.branch-current.outputs.value == '' && steps.branch-ref.outputs.value == '' }}
+      run: |
+        echo value=${GITHUB_REF_NAME} >> $GITHUB_OUTPUT
+    - shell: bash
+      name: target branch name from pull request
+      id: target-branch
+      run: |
+        name=$GITHUB_BASE_REF
+        if [ -z "$name" ]
+        then
+          name='${{ steps.branch-current.outputs.value }}${{ steps.branch-ref.outputs.value }}${{ steps.branch.outputs.value }}'
+        fi
+        echo "value=$name" >> $GITHUB_OUTPUT

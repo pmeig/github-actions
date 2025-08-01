@@ -1,0 +1,38 @@
+name: find suffix version
+description: find suffix by env
+
+inputs:
+  env:
+    description: environment to construct version
+    required: true
+outputs:
+  value:
+    value: ${{ steps.before.outputs.value }}${{ steps.suffix.outputs.value }}
+    description: get suffix
+
+runs:
+  using: composite
+  steps:
+    - name: suffix environment
+      id: suffix
+      shell: bash
+      if: ${{ inputs.env != 'prod' && github.event_name != 'workflow_dispatch' }}
+      run: |
+        suffix='-SNAPSHOT'
+        if [ "${{ inputs.env }}" == 'prep' ]
+        then
+          suffix='-RC'
+        fi
+        echo "value=$suffix" >> $GITHUB_OUTPUT
+
+    - name: before suffix
+      shell: bash
+      id: before
+      if: ${{ github.event_name == 'workflow_dispatch' }}
+      run: |
+        suffix='-TRY'
+        if [  "${{ inputs.env }}" != 'dev' ]
+        then
+          suffix='-FIX'
+        fi
+        echo "value=$suffix" >> $GITHUB_OUTPUT

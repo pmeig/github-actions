@@ -1,0 +1,98 @@
+name: sonar properties
+description: create sonar properties
+inputs:
+  libraries:
+    required: false
+    description: libraries to add in sonar
+    default: ''
+  coverage:
+    required: false
+    default: 'jacoco'
+    description: plugin's name of coverage
+  coverage-exclusions:
+    default: ''
+    description: excludes coverage items
+    required: false
+  quality:
+    required: false
+    default: 'true'
+    description: wait quality result
+  plugin-lombok:
+    required: false
+    default: 'true'
+    description: add copy-dependencies plugin to extract lombok
+  workspace:
+    description: working-directory
+    default: '.'
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: create properties
+      id: sonar
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        echo "sonar.projectKey=${{ github.event.repository.name }}" > sonar-project.properties
+        echo "sonar.language=java" >> sonar-project.properties
+        echo "sonar.java.coveragePlugin=${{ inputs.coverage }}" >> sonar-project.properties
+        echo "sonar.qualitygate.wait=${{ inputs.quality }}" >> sonar-project.properties
+        echo "sonar.sourceEncoding=UTF-8" >> sonar-project.properties
+        echo "sonar.binaries=*/**" >> sonar-project.properties
+        echo "sonar.java.binaries=*/**" >> sonar-project.properties
+        echo 'sonar.coverage.jacoco.xmlReportPaths=./sonar-report/target/site/jacoco-aggregate/jacoco.xml' >> sonar-project.properties
+        libraries='${{ inputs.libraries }}'
+        if [[ "$libraries" == *"lombok"* ]]
+        then
+          for libs in $(echo "${libraries//,/ }")
+          do
+            if [[ "$libs" == *"lombok"* ]]
+            then
+              echo "lombok=$libs" >> $GITHUB_OUTPUT
+            fi
+          done
+        else
+          if [ -n "$(mvn dependencies:tree -Dincludes=lombok -q -DforceStdout=true -Pjacoco)" ]
+          then
+            if [ -n "$libraries" ]
+            then
+              libraries="$libraries,"
+            fi
+            libraries="${libraries}./sonar-report/target/lib/lombok-*.jar"
+            echo "lombok=\${project.basedir}/target/lib/lombok-*.jar" >> $GITHUB_OUTPUT
+          fi
+        fi
+        echo "sonar.java.libraries=$libraries" >> sonar-project.properties
+        other=''
+        if [ -n "${{ inputs.coverage-exclusions }}" ]
+        then
+          exclusions='${{ inputs.coverage-exclusions }}'
+          other=','
+          for line in $(echo "$exclusions")
+          do
+            other="$other$line"
+          done
+        fi
+        echo "sonar.cpd.exclusions=**/src/test/**" >> sonar-project.properties
+        echo "sonar.coverage.exclusions=**/configuration/**/*.java,**/model/**/*.java,**/properties/**/*.java,**/src/test/**,**/*Configuration.java,**/*Properties.java$other" >> sonar-project.properties
+    - name: create plugin lombok
+      if: ${{ inputs.plugin-lombok == 'true' && steps.sonar.outputs.lombok != '' }}
+      id: lombok
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        target='${{ steps.sonar.outputs.lombok }}'
+        name=$(echo "$target" | rev | cut -d'/' -f1 | rev)
+        configuration="<configuration><outputDirectory>${target/\/$name/}</outputDirectory><includeArtifactIds>lombok</includeArtifactIds></configuration>"
+        executing='<phase>compile</phase><goals><goal>copy-dependencies</goal></goals>'
+        execution="<execution>$executing$configuration</execution>"
+        plugin="<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-dependency-plugin</artifactId><executions>$execution</executions></plugin>"
+        echo "plugin=$plugin" >> $GITHUB_OUTPUT
+    - name: insert plugin
+      if: ${{ steps.lombok.outputs.plugin != '' }}
+      uses: pmeig/github-actions/actions/java/maven/insert/plugin@compound
+      with:
+        workspace: ${{ inputs.workspace }}
+        plugins: ${{ steps.lombok.outputs.plugin }}
+

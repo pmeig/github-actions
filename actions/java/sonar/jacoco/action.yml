@@ -1,0 +1,81 @@
+name: insert jacoco
+description: insert jacoco in pom
+
+inputs:
+  workspace:
+    description: workspace to install jacoco
+    default: '.'
+    required: false
+outputs:
+  modules:
+    value: ${{ steps.context.outputs.modules }}
+    description: 'all modules present in project'
+  version:
+    value: ${{ steps.version.outputs.latest }}
+    description: latest version jacoco plugin
+
+runs:
+  using: composite
+  steps:
+    - name: plugin jacoco
+      id: context
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        if [ -z "$(mvn help:evaluate -Dexpression=project.build.plugins -q -DforceStdout=true -Pjacoco | grep jacoco-maven-plugin)" ]
+        then
+          modules=$(mvn help:evaluate -Dexpression=project.modules -q -DforceStdout=true | grep '<string>' | cut -d'>' -f2 | cut -d'<' -f1 | tr '\n' ' ')
+          report='report'
+          if [ -n "$modules" ]
+          then
+            report="report-aggregate"
+          fi
+          prepare='<execution><id>prepare-agent</id><goals><goal>prepare-agent</goal></goals></execution>'
+          reportExecution="<execution><phase>test</phase><goals><goal>$report</goal></goals></execution>"
+          head='<groupId>org.jacoco</groupId><artifactId>jacoco-maven-plugin</artifactId><version>${sonar.jacoco.version}</version>'
+          jacoco="<plugin>$head<executions>$prepare$reportExecution</executions></plugin>"
+          echo "modules=$modules" >> $GITHUB_OUTPUT
+          echo "jacoco=$jacoco" >> $GITHUB_OUTPUT
+        fi
+    - name: get latest version jacoco
+      uses: pmeig/github-actions/actions/java/maven/version/latest@compound
+      id: version
+      with:
+        groupId: org.jacoco
+        artifactId: jacoco-maven-plugin
+    - name: insert jacoco plugin version
+      uses: adeo/hf3p--ba-actions/actions/java/maven/insert/properties@compound
+      if: ${{ steps.context.outputs.jacoco != '' }}
+      with:
+        workspace: ${{ inputs.workspace }}
+        properties: sonar.jacoco.version=${{ steps.version.outputs.latest }}
+    - name: insert plugin jacoco
+      uses: adeo/hf3p--ba-actions/actions/java/maven/insert/plugin@compound
+      if: ${{ steps.context.outputs.jacoco != '' }}
+      with:
+        workspace: ${{ inputs.workspace }}
+        plugins: ${{ steps.context.outputs.jacoco }}
+    - name: create module
+      shell: bash
+      if: ${{ steps.context.outputs.modules != '' }}
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        mkdir -p ./sonar-report
+        groupId=$(mvn help:evaluate -Dexpression=project.groupId -q -DforceStdout)
+        artifactId=$(mvn help:evaluate -Dexpression=project.artifactId -q -DforceStdout)
+        version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+        echo '<?xml version="1.0" encoding="UTF-8"?><project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">' > ./sonar-report/pom.xml
+        echo "<modelVersion>4.0.0</modelVersion><parent><groupId>$groupId</groupId><artifactId>$artifactId</artifactId><version>$version</version></parent><packaging>pom</packaging><artifactId>sonar-report</artifactId><dependencies>" >> ./sonar-report/pom.xml
+        for module in $(echo "${{ steps.context.outputs.modules }}")
+        do
+          cd $module
+          dependModuleVersion=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          dependVersion="<version>$dependModuleVersion</version>"
+          dependency="<dependency><groupId>$groupId</groupId><artifactId>@artifactId</artifactId>$dependVersion</dependency>"
+          cd ..
+          echo "${dependency/@artifactId/$module}" >> ./sonar-report/pom.xml
+        done
+        echo "</dependencies></project>" >> ./sonar-report/pom.xml
+        sed -i -E 's/<\/modules>/<module>sonar-report<\/module><\/modules>/' ./pom.xml
+        
+        

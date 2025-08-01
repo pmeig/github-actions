@@ -1,0 +1,48 @@
+name: insert plugin
+description: insert plugin in pom
+
+inputs:
+  workspace:
+    default: '.'
+    required: false
+    description: working-directory
+  plugins:
+    required: true
+    description: all plugin text
+
+runs:
+  using: composite
+  steps:
+    - name: settings
+      shell: bash
+      id: settings
+      if: ${{ steps.jacoco.outputs.exist == '' }}
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        prefix='<build><plugins>'
+        suffix='</plugins></build>'
+        anchor='<\/project>'
+        if [ -n "$(grep '</build>' pom.xml)" ]
+        then
+          prefix='<plugins>'
+          suffix='</plugins>'
+          anchor='<\/build>'
+        fi
+        if [ -n "$(grep '</plugins>' pom.xml)" ]
+        then
+          prefix=''
+          suffix=''
+          anchor='<\/plugins>'
+        fi
+        echo "prefix=$prefix" >> $GITHUB_OUTPUT
+        echo "suffix=$suffix" >> $GITHUB_OUTPUT
+        echo "anchor=$anchor" >> $GITHUB_OUTPUT
+    - name: insert
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        anchor='${{ steps.settings.outputs.anchor }}'
+        plugins='${{ steps.settings.outputs.prefix }}${{ inputs.plugins }}${{ steps.settings.outputs.suffix }}'
+        plugins="${plugins//\//\\/}$anchor"
+        plugins="${plugins//\$/\\$}"
+        sed -i -e "s/$anchor/$plugins/g" ./pom.xml

@@ -1,0 +1,66 @@
+name: create release
+description: 'create release'
+inputs:
+  repo:
+    required: false
+    description: 'name of the repository'
+    default: ''
+  tag_name:
+    description: 'tag name'
+    required: true
+  name:
+    required: true
+    description: "name"
+  target_commitish:
+    required: true
+    description: 'branch name to commit tag'
+  body:
+    required: false
+    description: "Description of the release"
+    default: ""
+  draft:
+    required: false
+    description: "draft"
+    default: "false"
+  prerelease:
+    required: false
+    description: "prerelease"
+    default: "false"
+  generate_release_notes:
+    required: false
+    description: "generate release notes"
+    default: "true"
+  api_version:
+    required: false
+    description: "api version"
+    default: "2022-11-28"
+  accept:
+    required: false
+    default: "application/vnd.github+json"
+    description: "accept"
+
+
+runs:
+  using: composite
+  steps:
+    - name: config
+      id: config
+      shell: bash
+      run: |
+        repo='${{ inputs.repo }}'
+        if [ -z "$repo" ]
+        then
+          repo='${{ github.repository }}'
+        fi
+        echo "repo=$repo" >> $GITHUB_OUTPUT
+    - name: release
+      shell: bash
+      run: |
+        curl -L \
+            -s \
+            -X POST \
+            -H "Accept: ${{ inputs.accept }}" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: ${{ inputs.api_version }}" \
+            https://api.github.com/repos/${{ steps.config.outputs.repo }}/releases \
+            -d '{"tag_name":"${{ inputs.tag_name }}","target_commitish":"${{ inputs.target_commitish }}","name":"${{ inputs.name }}","body":"${{ inputs.body }}","draft":${{ inputs.draft }},"prerelease":${{ inputs.prerelease }},"generate_release_notes":${{ inputs.generate_release_notes }}}'

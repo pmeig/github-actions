@@ -1,0 +1,38 @@
+name: create pull request
+description: 'create pull request'
+inputs:
+  repo:
+    required: true
+    description: 'name of the repository'
+  api_version:
+    required: false
+    description: "api version"
+    default: "2022-11-28"
+  accept:
+    required: false
+    default: "application/vnd.github+json"
+    description: "accept"
+  title:
+    required: true
+    description: "title"
+  head:
+    required: true
+    description: "head branch"
+  base:
+    required: true
+    description: "base branch"
+
+
+runs:
+  using: composite
+  steps:
+    - name: release
+      shell: bash
+      run: |
+        curl -L \
+            -X POST \
+            -H "Accept: ${{ inputs.accept }}" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: ${{ inputs.api_version }}" \
+            https://api.github.com/repos/${{ inputs.repo }}/pulls \
+            -d '{"title":"${{ inputs.title }}","head":"${{ inputs.head }}","base":"${{ inputs.base }}"}'

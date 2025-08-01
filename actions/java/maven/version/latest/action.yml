@@ -1,0 +1,26 @@
+name: version latest
+description: find version latest of artifact
+
+inputs:
+  artifactId:
+    description: artifactId name
+    required: true
+  groupId:
+    required: true
+    description: groupId name
+
+outputs:
+  latest:
+    value: ${{ steps.version.outputs.latest }}
+    description: latest version in repo maven
+
+runs:
+  using: composite
+  steps:
+    - name: find
+      shell: bash
+      id: version
+      run: |
+        endPath=${{ inputs.groupId }}
+        endPath="${endPath//\.//}/${{ inputs.artifactId }}"
+        echo "latest=$( echo $(curl -s https://repo1.maven.org/maven2/$endPath/maven-metadata.xml | grep '<latest>' | tr '</?latest>' ' '))" >> $GITHUB_OUTPUT

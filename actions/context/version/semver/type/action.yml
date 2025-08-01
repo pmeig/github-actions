@@ -1,0 +1,34 @@
+name: semver type upgrade
+inputs:
+  env:
+    required: true
+    description: origin version environment
+  env-target:
+    required: true
+    description: environment target
+outputs:
+  value:
+    value: ${{ steps.major.outputs.value }}${{ steps.minor.outputs.value }}${{ steps.patch.outputs.value }}
+    description: type for semver
+
+runs:
+  using: composite
+  steps:
+    - name: type major
+      if: ${{ github.event_name == 'workflow_dispatch' && inputs.env-target == 'dev' && inputs.env == 'dev' }}
+      id: major
+      shell: bash
+      run:
+        echo "value=major" >> $GITHUB_OUTPUT
+    - name: type minor
+      if: ${{  inputs.env-target == 'prep' && inputs.env == 'dev' }}
+      id: minor
+      shell: bash
+      run:
+        echo "value=minor" >> $GITHUB_OUTPUT
+    - name: type patch
+      if: ${{ inputs.env-target == inputs.env && (inputs.env == 'prod' || inputs.env == 'prep') }}
+      id: patch
+      shell: bash
+      run:
+        echo "value=patch" >> $GITHUB_OUTPUT

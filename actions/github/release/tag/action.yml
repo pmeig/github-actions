@@ -1,0 +1,51 @@
+name: get release by tag
+description: 'get latest release'
+inputs:
+  repo:
+    required: false
+    default: ''
+    description: 'name of the repository'
+  api_version:
+    required: false
+    description: "api version"
+    default: "2022-11-28"
+  accept:
+    required: false
+    default: "application/vnd.github+json"
+    description: "accept"
+  tag:
+    required: true
+    description: tag do you want check is used to create release
+
+outputs:
+  release:
+    description: all information from release tag
+    value: ${{ steps.release.outputs.value }}
+
+runs:
+  using: composite
+  steps:
+    - name: release
+      id: release
+      shell: bash
+      run: |
+        repo='${{ inputs.repo }}'
+        if [ -z "$repo" ]
+        then
+          repo="${{ github.repository }}"
+        fi
+        release=$(curl -L \
+            -H "Accept: ${{ inputs.accept }}" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: ${{ inputs.api_version }}" \
+            ${GITHUB_API_URL}/repos/$repo/releases/tags/${{ inputs.tag }})
+        json=''
+        if [ "$release" != 'null' ]
+        then
+          json='{}'
+          tag=$(echo $release | jq -c '.tag_name')
+          title=$(echo $release | jq -c '.name')
+          message=$(echo $release | jq -c '.body')
+          json="{\"tag\":\"${tag:2:${#tag}},\"title\":$title,\"reason\":$message}"
+        fi
+        echo "value=$json" >> $GITHUB_OUTPUT

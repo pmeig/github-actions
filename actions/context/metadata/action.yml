@@ -1,0 +1,79 @@
+name: get context metadata
+description: create version by tag or now
+
+outputs:
+  branch:
+    value: ${{ steps.branch.outputs.current }}
+    description: branch name
+  target:
+    value: ${{ steps.branch.outputs.target }}
+    description: target branch name
+  env:
+    value: ${{ steps.env.outputs.value }}
+    description: current environment
+  env-target:
+    value: ${{ steps.env-target.outputs.value }}
+    description: target environment
+  maven:
+    value: ${{ steps.artifactory.outputs.maven }}
+    description: artifactory for maven
+  maven-target:
+    value: ${{ steps.artifactory-target.outputs.maven }}
+    description: artifactory target for maven
+  docker:
+    value: ${{ steps.artifactory.outputs.docker }}
+    description: artifactory for docker
+  docker-target:
+    value: ${{ steps.artifactory-target.outputs.docker }}
+    description: artifactory target for docker
+  docker-mirror:
+    value: ${{ steps.artifactory.outputs.docker-mirror }}
+    description: artifactory mirror
+  docker-mirror-target:
+    value: ${{ steps.artifactory-target.outputs.docker-mirror }}
+    description: artifactory mirror
+  npm:
+    value: ${{ steps.artifactory.outputs.npm }}
+    description: artifactory for npm
+  npm-target:
+    value: ${{ steps.artifactory-target.outputs.npm }}
+    description: artifactory for npm
+  semver-type:
+    value: ${{ steps.semver-type.outputs.value }}
+    description: semver type to use for bump version
+  generic:
+    value: ${{ steps.artifactory.outputs.generic }}
+    description: artifactory for generic
+
+runs:
+  using: composite
+  steps:
+    - uses: pmeig/github-actions/actions/github/branch@main
+      name: get branch
+      id: branch
+    - uses: pmeig/github-actions/actions/context/env@main
+      name: get env
+      id: env
+      with:
+        branch: ${{ steps.branch.outputs.current }}
+    - uses: pmeig/github-actions/actions/context/env@main
+      name: get target env
+      id: env-target
+      with:
+        branch: ${{ steps.branch.outputs.target }}
+    - uses: pmeig/github-actions/actions/artifactory/jfrog/repository@main
+      name: get artifactory
+      id: artifactory
+      with:
+        env: ${{ steps.env.outputs.value }}
+    - uses: pmeig/github-actions/actions/artifactory/jfrog/repository@main
+      name: get artifactory target
+      id: artifactory-target
+      with:
+        env: ${{ steps.env-target.outputs.value }}
+    - uses: pmeig/github-actions/actions/context/version/semver/type@main
+      name: semver type
+      id: semver-type
+      with:
+        env: ${{ steps.env.outputs.value }}
+        env-target: ${{ steps.env-target.outputs.value }}

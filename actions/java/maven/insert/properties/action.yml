@@ -1,0 +1,49 @@
+name: add properties
+description: add all properties in pom.xml
+
+inputs:
+  properties:
+    description: all properties insert name=value separate by space
+    default: ''
+    required: true
+  workspace:
+    required: false
+    default: '.'
+    description: working-directory
+
+runs:
+  using: composite
+  steps:
+    - name: insert properties
+      shell: bash
+      if: ${{ inputs.properties != '' }}
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        anchor='<\/project>'
+        tag='<properties>'
+        if [ -n "$(grep '<properties>' pom.xml)" ]
+        then
+          anchor='<\/properties>'
+          tag=''
+        fi
+        properties=$tag
+        isNewProperty=false
+        for property in $(echo '${{ inputs.properties }}')
+        do
+          name=$(echo "$property" | cut -d'=' -f1)
+          value=$(echo "$property" | cut -d'=' -f2)
+          regex="<$name>.*</$name>"
+          echo "name=$name value=$value property=$property regex=$regex"
+          if [ -z "$(grep -e $regex pom.xml)" ]
+          then
+            isNewProperty=true
+            properties="$properties<$name>$value<\/$name>"
+          else
+            mvn versions:set-property -Dproperty=$name -DnewVersion=$value -DgenerateBackupPoms=false -q
+          fi
+        done
+        if [ "$isNewProperty" = 'true' ]
+        then
+          properties="$properties${tag/</<\\/}"
+          sed -i -E "s/$anchor/$properties$anchor/" pom.xml
+        fi

@@ -1,0 +1,67 @@
+name: jfrog setup
+description: setup jfrog and apply configuration
+
+inputs:
+  id:
+    required: false
+    default: 'pmeig'
+    description: 'create multi config with id (separate by comma)'
+  url:
+    required: false
+    default: 'http://jfrog'
+    description: 'url to use in config'
+  user:
+    required: true
+    description: user to connect of artifactory
+  password:
+    required: true
+    description: password to connect of jfrog
+
+runs:
+  using: composite
+  steps:
+    - uses: jfrog/setup-jfrog-cli@v2
+    - shell: bash
+      name: create configs
+      if: ${{ contains(inputs.id, ',') }}
+      run: |
+        IFS=','
+        read -r -a ids <<< "${{ inputs.id }}"
+        read -r -a urls <<< "${{ inputs.url }}"
+        read -r -a users <<< "${{ inputs.id }}"
+        read -r -a passwords <<< "${{ inputs.password }}"
+        IFS=' '
+        numberConfig=${#ids[@]}
+        numberUser=${#users[@]}
+        numberUrl=${#urls[@]}
+        numberPassword=${#passwords[@]}
+        if [ ! $numberConfig = $numberUsers ] || [ ! $numberConfig = $numberUrl ] || [ ! $numberConfig = $numberPassword ]
+        then
+          echo "::notice title=configs is not valid::config missing arguments"
+          exit 500
+        fi
+        for index in ${!ids[@]}
+        do
+          id=${ids[$index]}
+          url=${urls[$index]}
+          user=${users[$index]}
+          password=${passwords[$index]}
+          jfrog config add $id --interactive=false --artifactory-url="$url" --user="$user" --password="$password"
+          jfrog rt ping --server-id=$id
+        done
+    - name: create config
+      shell: bash
+      if: ${{ !contains(inputs.id, ',') }}
+      run: |
+        url="${{ inputs.url }}"
+        id="${{ inputs.id }}"
+        if [ "$id" = "" ]
+        then
+          jfrog config add --interactive=false --artifactory-url="$url" --user="${{ inputs.user }}" --password="${{ inputs.password }}"
+          jfrog rt ping
+        else
+          echo jfrog config add $id --interactive=false --artifactory-url="$url" --user="${{ inputs.user }}" --password="${{ inputs.password }}"
+          jfrog config add $id --interactive=false --artifactory-url="$url" --user="${{ inputs.user }}" --password="${{ inputs.password }}"
+          echo jfrog rt ping --server-id=$id
+          jfrog rt ping --server-id=$id
+        fi

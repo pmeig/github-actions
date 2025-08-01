@@ -1,0 +1,115 @@
+name: files filter
+description: return only files accepted
+
+inputs:
+  files:
+    required: true
+    description: files will check
+  filter:
+    required: true
+    description: 'filter format start=<starter> end=<end> contains=<contains>'
+  accept:
+    required: false
+    description: 'pull in accepted or rejected'
+    default: 'true'
+
+outputs:
+  value:
+    value: ${{ steps.accept.outputs.files }}${{ steps.reject.outputs.files }}
+    description: 'files accepted'
+
+runs:
+  using: composite
+  steps:
+    - name: accepted filter
+      if: ${{ inputs.accept == 'true' }}
+      shell: bash
+      id: accept
+      run: |
+        files='${{ inputs.files }}'
+        if [ -n "${{ inputs.filter }}" ]
+        then
+          files=''
+          for name in $(echo '${{ inputs.files }}' )
+          do
+            isValid=false
+            filters=(${{ inputs.filter }})
+            index=$((${#filters[@]} - 1))
+            while [ "$isValid" == "false" ] &&  (( $index >= 0 ))
+            do
+              filter=${filters[$index]}
+              type=$(echo "$filter" | cut -d'=' -f1)
+              value=$(echo "$filter" | cut -d'=' -f2)
+              index=$(( index - 1))
+              if [ "$type" == "start" ]
+              then
+                if [[ "$name" == "$value"* ]]
+                then
+                  isValid=true
+                fi
+              elif [ "$type" == "end" ]
+              then
+                if [[ "$name" == *"$value" ]]
+                then
+                  isValid=true
+                fi
+              else
+                if [[ "$name" == *"$value"* ]]
+                then
+                  isValid=true
+                fi
+              fi
+            done
+            if [ "$isValid" == "true" ]
+            then
+              files="$name $files"
+            fi
+          done
+        fi
+        echo "files=$(echo $files)" >> $GITHUB_OUTPUT
+    - name: rejected filter
+      if: ${{ inputs.accept == 'false' }}
+      shell: bash
+      id: reject
+      run: |
+         files='${{ inputs.files }}'
+         if [ -n "${{ inputs.filter }}" ]
+         then
+           files=''
+           for name in $(echo '${{ inputs.files }}' )
+           do
+             isValid=false
+             filters=(${{ inputs.filter }})
+             index=$((${#filters[@]} - 1))
+             while [ "$isValid" == "false" ] && (( $index >= 0 ))
+             do
+               filter=${filters[$index]}
+               type=$(echo "$filter" | cut -d'=' -f1)
+               value=$(echo "$filter" | cut -d'=' -f2)
+               index=$(( index - 1))
+               if [ "$type" == "start" ]
+               then
+                 if [[ "$name" == "$value"* ]]
+                 then
+                   isValid=true
+                 fi
+               elif [ "$type" == "end" ]
+               then
+                 if [[ "$name" == *"$value" ]]
+                 then
+                   isValid=true
+                 fi
+               else
+                 if [[ "$name" == *"$value"* ]]
+                 then
+                   isValid=true
+                 fi
+               fi
+             done
+             if [ "$isValid" == "false" ]
+             then
+               files="$name $files"
+             fi
+           done
+         fi
+         echo "files=$(echo $files)" >> $GITHUB_OUTPUT
