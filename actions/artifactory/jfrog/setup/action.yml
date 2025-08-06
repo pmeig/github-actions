@@ -8,7 +8,7 @@ inputs:
     description: 'create multi config with id (separate by comma)'
   url:
     required: false
-    default: 'http://jfrog'
+    default: 'http://jfrog.pmeig'
     description: 'url to use in config'
   user:
     required: true

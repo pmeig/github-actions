@@ -48,7 +48,7 @@ runs:
         then
           maven="maven-releases-local"
           docker="pmeig-${dockerMirror}-release"
-          npm='npm-local'
+          npm='npm-releases-local'
         fi
         echo "maven=$maven" >> $GITHUB_OUTPUT
         echo "docker=${docker}.jfrog.io" >> $GITHUB_OUTPUT

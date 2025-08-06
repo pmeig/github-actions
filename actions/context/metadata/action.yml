@@ -44,6 +44,9 @@ outputs:
   generic:
     value: ${{ steps.artifactory.outputs.generic }}
     description: artifactory for generic
+  manager:
+    value: ${{ steps.manager.outputs.value }}
+    description: npm/pnpm/yarn
 
 runs:
   using: composite
@@ -77,3 +80,6 @@ runs:
       with:
         env: ${{ steps.env.outputs.value }}
         env-target: ${{ steps.env-target.outputs.value }}
+    - uses: pmeig/github-actions/actions/node/manager@main
+      id: manager
+      if: ${{ hashFiles('**/package.json') != '' }}

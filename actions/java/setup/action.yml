@@ -20,7 +20,7 @@ inputs:
     description: artifactory password
   artifactory-url:
     required: false
-    default: 'http://jfrog'
+    default: 'http://jfrog.pmeig'
     description: artifactory url do you want to connect
 
 runs:

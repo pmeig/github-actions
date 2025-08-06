@@ -1,0 +1,65 @@
+name: sonar configuration for node
+description: setup configuration for sonar
+
+inputs:
+  sources:
+    default: 'src'
+    description: folder sources to control
+    required: false
+  sources-test:
+    default: 'tests'
+    description: folder test sources to control
+    required: false
+  workspace:
+    default: '.'
+    required: false
+    description: 'location for your sonar.properties'
+  manager:
+    default: 'npm'
+    description: use this manager npm/pnpm/yarn
+    required: false
+  exclusion:
+    default: 'jest.config.ts,**/*.spec.ts,**/*.test.ts,**/*.js'
+    description: exclude for analyses in sonar
+    required: false
+  tsconfig:
+    description: path of tsconfig
+    default: 'tsconfig.json'
+    required: false
+
+outputs:
+  config:
+    value: ${{ inputs.workspace }}/sonar-project.properties
+    description: config sonar
+
+
+runs:
+  using: composite
+  steps:
+    - name: find lcov.info
+      shell: bash
+      id: lcov
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        lcovFolder=$( ${{ inputs.manager }} jest --showConfig | jq -rc '.configs[] | .coverageDirectory')
+        echo "path=$lcovFolder/lcov.info" >> $GITHUB_OUTPUT
+    - name: create files sonar.properties
+      if: ${{ hashFiles('**/sonar-project.properties') == '' }}
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        repository='${{ github.repository }}'
+        if [[ "$repository" == *"/"* ]]
+        then
+          repository=$(echo $repository | cut -d'/' -f2)
+        fi
+        echo "sonar.projectName=$repository" > sonar-project.properties
+        echo "sonar.projectVersion=$(jq -r '.version' package.json)" >> sonar-project.properties
+        echo "sonar.sources=${{ inputs.sources }} >> sonar-project.properties
+        echo 'sonar.sourceEncoding=UTF-8' >> sonar-project.properties
+        echo 'sonar.exclusions=${{ inputs.exclusion }}' >> sonar-project.properties
+        echo 'sonar.typescript.tsconfigPath=${{ inputs.tsconfig }}' >> sonar-project.properties
+        echo 'sonar.tests=${{ inputs.sources-test }}' >> sonar-project.properties
+        echo 'sonar.test.inclusions=**/*.spec.ts' >> sonar-project.properties
+        echo "sonar.javascript.lcov.reportPaths=$(${{ steps.lcov.outputs.path }}" >> sonar-project.properties
+        

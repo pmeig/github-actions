@@ -18,7 +18,7 @@ runs:
     - name: yarn
       id: yarn
       shell: bash
-      if: ${{ steps.pnpm.outputs.value == '' && hashFiles('**/yarn.lock') == '' }}
+      if: ${{ steps.pnpm.outputs.value == '' && hashFiles('**/yarn.lock') != '' }}
       run: |
         echo value=yarn >> $GITHUB_OUTPUT
     - name: npm
