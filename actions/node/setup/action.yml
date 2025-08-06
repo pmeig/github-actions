@@ -28,11 +28,6 @@ inputs:
     required: false
     description: location of node_modules
 
-outputs:
-  cache-path:
-    value: ${{ inputs.cache-path }}
-    description: where cache is install
-
 runs:
   using: composite
   steps:
