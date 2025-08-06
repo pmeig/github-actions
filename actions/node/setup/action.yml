@@ -33,10 +33,6 @@ runs:
   steps:
     - uses: pmeig/github-actions/actions/node/manager@main
       id: manager
-    - uses: actions/setup-node@v4
-      id: setup-node-version
-      with:
-        node-version: ${{ inputs.version }}
     - name: Install pnpm
       if: ${{ steps.manager.outputs.value == 'pnpm' }}
       uses: pnpm/action-setup@v4
