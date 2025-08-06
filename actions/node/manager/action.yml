@@ -12,7 +12,7 @@ runs:
     - name: pnpm
       id: pnpm
       shell: bash
-      if: ${{ hashFiles('**/pnpm-workspace') != '' }}
+      if: ${{ hashFiles('**/pnpm-workspace.yml') != '' }}
       run: |
         echo value=pnpm >> $GITHUB_OUTPUT
     - name: yarn
