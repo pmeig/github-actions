@@ -12,13 +12,13 @@ runs:
     - name: pnpm
       id: pnpm
       shell: bash
-      if: ${{ hashFiles('**/pnpm-workspace.yml') != '' }}
+      if: ${{ hashFiles('pnpm-workspace.yml') != '' }}
       run: |
         echo value=pnpm >> $GITHUB_OUTPUT
     - name: yarn
       id: yarn
       shell: bash
-      if: ${{ steps.pnpm.outputs.value == '' && hashFiles('**/yarn.lock') != '' }}
+      if: ${{ steps.pnpm.outputs.value == '' && hashFiles('yarn.lock') != '' }}
       run: |
         echo value=yarn >> $GITHUB_OUTPUT
     - name: npm
