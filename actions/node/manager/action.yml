@@ -9,19 +9,24 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: pnpm
+    - name: is pnpm
       id: pnpm
       shell: bash
-      if: ${{ hashFiles('**/pnpm-workspace.yml') != '' }}
       run: |
-        echo value=pnpm >> $GITHUB_OUTPUT
-    - name: yarn
+        if [ -f "pnpm-workspace.yaml" ]
+        then
+          echo value=pnpm >> $GITHUB_OUTPUT
+        fi
+    - name: is yarn
       id: yarn
       shell: bash
-      if: ${{ steps.pnpm.outputs.value == '' && hashFiles('**/yarn.lock') != '' }}
+      if: ${{ steps.pnpm.outputs.value == '' }}
       run: |
-        echo value=yarn >> $GITHUB_OUTPUT
-    - name: npm
+        if [ -f "yarn.lock" ]
+        then
+          echo value=yarn >> $GITHUB_OUTPUT
+        fi
+    - name: is npm
       id: npm
       shell: bash
       if: ${{ steps.pnpm.outputs.value == '' && steps.yarn.outputs.value == '' }}
