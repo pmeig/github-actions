@@ -2,6 +2,14 @@ name: find files modified
 description: find all files modified
 
 inputs:
+  target:
+    description: target sha or branch or tag use to compare on origin
+    required: false
+    default: ''
+  origin:
+    description: origin sha or branch or tag to compare
+    required: false
+    default: ''
   parent:
     description: only parent
     required: false
@@ -14,6 +22,7 @@ inputs:
     description: "filter format start=<starter> end=<end> contains=<contains>"
     default: ''
     required: false
+
 
 outputs:
   files:
@@ -31,27 +40,28 @@ runs:
   steps:
     - name: get branch
       id: branch
-      if: ${{ startsWith(github.event_name, 'pull_request') }}
+      if: ${{ inputs.target != '' || inputs.origin != '' }}
       uses: pmeig/github-actions/actions/github/branch@main
-    - name: checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        path: tmp
     - name: find files
       id: files
       shell: bash
       working-directory: tmp
       run: |
         files=''
-        from='HEAD^1'
-        to='HEAD'
-        if [[ '${{ github.event_name }}' = "pull_request"* ]]
+        from='${{ inputs.origin }}'
+        to='${{ inputs.target }}'
+        if [ -z "$from" ]
         then
-          from='origin/${{ steps.branch.outputs.target }}'
-          git fetch origin ${{ steps.branch.outputs.target }}
+          from='${{ steps.branch.outputs.current }}'
         fi
-        for name in $(git diff --name-only "$from" "$to" )
+        if [ -z "$to" ]
+        then
+          to='${{ steps.branch.outputs.target }}'
+        fi
+        compare=$(curl -L -H "Accept: application/vnd.github+json" \
+        -H "Authorization: Bearer ${{ github.token }}" -H \
+        "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/${{ github.repository }}/compare/$to...$from )
+        for name in $(echo "$compare" | jq -r '.files[].filename')
         do
           files="$name $files"
         done
