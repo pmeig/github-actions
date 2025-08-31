@@ -23,6 +23,14 @@ inputs:
     required: false
     default: 'http://jfrog'
     description: artifactory url do you want to connect
+  remote-user:
+    description: user use to connect at remote
+    required: false
+    default: ''
+  remote-pwd:
+    description: password use to connect at remote
+    required: false
+    default: ''
   workspace:
     default: '.'
     required: false
@@ -51,14 +59,22 @@ runs:
       run: |
         export AUTH=$(echo -n ${{ inputs.artifactory-user }}:${{ inputs.artifactory-password }} | base64 -w0)
         echo "NODE_AUTH_TOKEN=$AUTH" >> $GITHUB_ENV
-
+        login-remote=''
+        if [ -n '${{ inputs.remote-user }}' ] && [ -n '${{ inputs.remote-pwd }}' ]
+        then
+          export REMOTE_AUTH=$(echo -n ${{ inputs.remote-user }}:${{ inputs.remote-pwd }} | base64 -w0)
+          login-remote='//https://registry.npmjs.org/:_auth=$REMOTE_AUTH'
+        fi
+        
         ${{ steps.manager.outputs.value }} config set registry=https://registry.npmjs.org/
-        ${{ steps.manager.outputs.value }} config set @pmeig:registry=${{ inputs.artifactory-url }}/artifactory/api/npm/npm/
+        ${{ steps.manager.outputs.value }} config set @pmeig:registry=${{ inputs.artifactory-url }}/artifactory/
         {
-          echo //${{ inputs.artifactory-url }}/artifactory/api/npm/npm/:_auth=${AUTH}
-          echo //${{ inputs.artifactory-url }}/artifactory/api/npm/npm-snapshots/:_auth=${AUTH}
-          echo 'always-auth=true'
+          echo //${{ inputs.artifactory-url }}/artifactory/npm-snapshots-local:_auth=${AUTH}
+          echo //${{ inputs.artifactory-url }}/artifactory/npm-releases-local:_auth=${AUTH}
+          echo //${{ inputs.artifactory-url }}/artifactory/node:_auth=${AUTH}
+          echo " $login-remote"
         } >> ~/.npmrc
+
     - name: cache node_modules
       uses: actions/cache@v4
       with:
