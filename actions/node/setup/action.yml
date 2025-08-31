@@ -27,7 +27,7 @@ inputs:
     description: user use to connect at remote
     required: false
     default: ''
-  remote-pwd:
+  remote-password:
     description: password use to connect at remote
     required: false
     default: ''
