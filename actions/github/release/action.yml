@@ -1,5 +1,4 @@
 name: create release
-description: 'create release'
 inputs:
   repo:
     required: false
@@ -9,9 +8,9 @@ inputs:
     description: 'tag name'
     required: true
   name:
+    description: 'name of release'
     required: true
-    description: "name"
-  target_commitish:
+  branch:
     required: true
     description: 'branch name to commit tag'
   body:
@@ -63,4 +62,4 @@ runs:
             -H "Authorization: Bearer ${{ github.token }}" \
             -H "X-GitHub-Api-Version: ${{ inputs.api_version }}" \
             https://api.github.com/repos/${{ steps.config.outputs.repo }}/releases \
-            -d '{"tag_name":"${{ inputs.tag_name }}","target_commitish":"${{ inputs.target_commitish }}","name":"${{ inputs.name }}","body":"${{ inputs.body }}","draft":${{ inputs.draft }},"prerelease":${{ inputs.prerelease }},"generate_release_notes":${{ inputs.generate_release_notes }}}'
+            -d '{"tag_name":"${{ inputs.tag_name }}","target_commitish":"${{ inputs.branch }}","name":"${{ inputs.name }}","body":"${{ inputs.body }}","draft":${{ inputs.draft }},"prerelease":${{ inputs.prerelease }},"generate_release_notes":${{ inputs.generate_release_notes }}}'

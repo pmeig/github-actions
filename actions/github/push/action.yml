@@ -6,7 +6,7 @@ inputs:
     required: false
     default: 'github action'
   mail:
-    default: 'github.action@service.adeo.com'
+    default: 'github.action@pmeig.com'
     required: false
     description: 'mail of user push'
   commit:
