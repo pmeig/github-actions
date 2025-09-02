@@ -20,7 +20,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: jfrog/setup-jfrog-cli@v2
+    - uses: jfrog/setup-jfrog-cli@v4
     - shell: bash
       name: create configs
       if: ${{ contains(inputs.id, ',') }}
