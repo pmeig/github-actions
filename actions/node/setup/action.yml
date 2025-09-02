@@ -21,7 +21,7 @@ inputs:
     default: ""
   artifactory-url:
     required: false
-    default: 'http://jfrog'
+    default: 'http://jfrog:8081'
     description: artifactory url do you want to connect
   remote-user:
     description: user use to connect at remote
