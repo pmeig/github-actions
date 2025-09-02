@@ -59,11 +59,11 @@ runs:
       run: |
         export AUTH=$(echo -n ${{ inputs.artifactory-user }}:${{ inputs.artifactory-password }} | base64 -w0)
         echo "NODE_AUTH_TOKEN=$AUTH" >> $GITHUB_ENV
-        login-remote=''
+        login_remote=''
         if [ -n '${{ inputs.remote-user }}' ] && [ -n '${{ inputs.remote-pwd }}' ]
         then
           export REMOTE_AUTH=$(echo -n ${{ inputs.remote-user }}:${{ inputs.remote-pwd }} | base64 -w0)
-          login-remote='//https://registry.npmjs.org/:_auth=$REMOTE_AUTH'
+          login_remote='//https://registry.npmjs.org/:_auth=$REMOTE_AUTH'
         fi
         
         ${{ steps.manager.outputs.value }} config set registry=https://registry.npmjs.org/
