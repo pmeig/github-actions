@@ -46,8 +46,8 @@ runs:
           url=${urls[$index]}
           user=${users[$index]}
           password=${passwords[$index]}
-          jfrog config add $id --interactive=false --artifactory-url="$url" --user="$user" --password="$password"
-          jfrog rt ping --server-id=$id
+          jf config add $id --interactive=false --artifactory-url="$url" --user="$user" --password="$password"
+          jf rt ping --server-id=$id
         done
     - name: create config
       shell: bash
@@ -57,11 +57,9 @@ runs:
         id="${{ inputs.id }}"
         if [ "$id" = "" ]
         then
-          jfrog config add --interactive=false --artifactory-url="$url" --user="${{ inputs.user }}" --password="${{ inputs.password }}"
-          jfrog rt ping
+          jf config add --interactive=false --artifactory-url="$url" --user="${{ inputs.user }}" --password="${{ inputs.password }}"
+          jf rt ping
         else
-          echo jfrog config add $id --interactive=false --artifactory-url="$url" --user="${{ inputs.user }}" --password="${{ inputs.password }}"
-          jfrog config add $id --interactive=false --artifactory-url="$url" --user="${{ inputs.user }}" --password="${{ inputs.password }}"
-          echo jfrog rt ping --server-id=$id
-          jfrog rt ping --server-id=$id
+          jf config add $id --interactive=false --artifactory-url="$url" --user="${{ inputs.user }}" --password="${{ inputs.password }}"
+          jf rt ping --server-id=$id
         fi
