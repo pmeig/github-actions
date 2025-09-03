@@ -1,0 +1,135 @@
+name: dependencies pre build
+description: retrieves all dependencies could build before
+
+inputs:
+  dev:
+    required: false
+    description: 'include dev dependencies true/false'
+    default: 'false'
+  workspace:
+    description: 'workspace to execute pre build'
+    default: '.'
+    required: false
+  prefix:
+    required: false
+    description: prefix of dependencies will build
+    default: ''
+  subpath-resolver:
+    description: 'when found new dependency, execute bash script to retrieve path of package.json [$depend is name of dependency on dependencies section], please create package variable with path'
+    required: true
+
+
+outputs:
+  paths:
+    value: ${{ steps.priority.outputs.value }}
+    description: 'paths of dependencies to build by priority (no error build)'
+
+
+runs:
+  using: composite
+  steps:
+    - name: listed dependencies
+      id: dependencies
+      working-directory: ${{ inputs.workspace }}
+      shell: bash
+      run: |
+        dependencies=$(jq -rc '.dependencies | keys | map(select(. | startswith("${{ inputs.prefix }}"))) | .[]' package.json)
+        echo "value=$dependencies" >> $GITHUB_OUTPUT
+    - name: listed dev dependencies
+      if: ${{ inputs.dev == 'true' }}
+      id: dev-dependencies
+      working-directory: ${{ inputs.workspace }}
+      shell: bash
+      run: |
+        dependencies=$(jq -rc '.devDependencies | keys | map(select(. | startswith("${{ inputs.prefix }}"))) | .[]' package.json)
+        echo "value=$dependencies" >> $GITHUB_OUTPUT
+    - name: retrieve all sub dependencies
+      id: sub-dependencies
+      if: ${{ steps.dependencies.outputs.value != '' || steps.dev-dependencies.outputs.value != '' && inputs.dev == 'false' }}
+      shell: bash
+      run: |
+        json='[]'
+        depends='${{ steps.dependencies.outputs.value }} ${{ steps.dev-dependencies.outputs.value }}'
+        already=' '
+        while [ -n "$depends" ]
+        do
+         depend=$(echo "$depends" | cut -d' ' -f1)
+         depends=$(echo "$depends" | cut -d' ' -f2-)
+         if [[ " $already " != *" $depend "* ]]
+         then
+           already="$already$depend "
+           ${{ inputs.subpath-resolver }}
+           dependencies=$(jq -rc '.dependencies | keys | map(select(. | startswith("${{ inputs.prefix }}")))' $package/package.json)
+           module="{\"name\":\"$depend\",\"dependencies\": $dependencies, \"path\": \"$package\"}"
+           json=$(echo "$json" | jq -c ". + [$module]")
+           if [ "$dependencies" != '[]' ]
+           then
+             depends="$depends $(echo $dependencies | jq -c '.[]')"
+           fi
+         fi
+        done
+        echo "value=$(echo $json | jq -rc 'sort_by(.dependencies | length)')" >> $GITHUB_OUTPUT
+    - name: retrieve all sub dependencies
+      id: sub-dependencies-dev
+      if: ${{ steps.dependencies.outputs.value != '' || steps.dev-dependencies.outputs.value != '' && inputs.dev == 'true' }}
+      shell: bash
+      run: |
+        json='[]'
+        depends='${{ steps.dependencies.outputs.value }} ${{ steps.dev-dependencies.outputs.value }}'
+        already=' '
+        while [ -n "$depends" ]
+        do
+         depend=$(echo "$depends" | cut -d' ' -f1)
+         depends=$(echo "$depends" | cut -d' ' -f2-)
+         if [[ " $already " != *" $depend "* ]]
+         then
+           already="$already$depend "
+           ${{ inputs.subpath-resolver }}
+           dependencies=$(jq -rc '.dependencies | keys | map(select(. | startswith("${{ inputs.prefix }}")))' $package/package.json)
+           devDependencies=$(jq -rc '.devDependencies | keys | map(select(. | startswith("${{ inputs.prefix }}")))' $package/package.json)
+           dependencies=$(echo $dependencies | jq -rc --argjson concat "$devDependencies" '. + $concat')
+           module="{\"name\":\"$depend\",\"dependencies\": $dependencies, \"path\": \"$package\"}"
+           json=$(echo "$json" | jq -c ". + [$module]")
+           if [ "$dependencies" != '[]' ]
+           then
+             depends="$depends $(echo $dependencies | jq -c '.[]')"
+           fi
+         fi
+        done
+        echo "value=$(echo $json | jq -rc 'sort_by(.dependencies | length)')" >> $GITHUB_OUTPUT
+    - name: order by priority
+      id: priority
+      shell: bash
+      run: |
+        built=' '
+        value=''
+        modules=$(echo '${{ steps.sub-dependencies.outputs.value }}${{ steps.sub-dependencies-dev.outputs.value }}' | jq -rc '.[]')
+        while [ -n "$modules" ]
+        do
+          module=$(echo "$modules" | cut -d' ' -f1)
+          modules=$(echo "$modules" | cut -d' ' -f2-)
+          name=$(echo $module | jq -r '.name')
+          dependencies=$(echo $module | jq -r '.dependencies')
+          valid='true'
+          if [ "$dependencies" != '[]' ]
+          then
+            dependencies=$(echo $dependencies | jq -rc '.[]')
+            while [ "$valid" == 'true' ] && [ -n "$dependencies" ]
+            do
+              dependency=$(echo "$dependencies" | cut -d' ' -f1)
+              dependencies=$(echo "$dependencies" | cut -d' ' -f2-)
+              if [[ " $built " != *" $dependency "* ]]
+              then
+                valid='false'
+              fi
+            done
+          fi
+          if [ "$valid" == 'true' ]
+          then
+            built="$built$name "
+            value="$value $(echo $module | jq -r '.path')"
+          else
+            modules="$modules $module"
+          fi
+        done
+        echo "value=${value:1}" >> $GITHUB_OUTPUT
