@@ -69,6 +69,8 @@ runs:
       id: pull-request-files
       shell: bash
       if: ${{ github.event.pull_request.merged == true }}
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         diff=$(gh pr view ${{ github.event.pull_request.number }} --json files -q '.files.[].path')
         files=''
