@@ -70,12 +70,18 @@ runs:
       shell: bash
       if: ${{ startsWith(github.event_name, 'pull_request') && github.event.pull_request.merged == 'true'  }}
       run: |
-        gh pr view ${{ github.event.pull_request.number }} --json files -q '.files.[].path'
+        diff=$(gh pr view ${{ github.event.pull_request.number }} --json files -q '.files.[].path')
+        files=''
+        for name in $diff
+        do
+          files="$name $files"
+        done
+         echo "path=$(echo $files)" >> $GITHUB_OUTPUT
     - name: apply includes
       id: includes
       uses: pmeig/github-actions/actions/github/diff/filter@main
       with:
-        files: ${{ steps.files.outputs.path }}
+        files: ${{ steps.files.outputs.path }}${{ steps.pull-request-files.outputs.path }}
         filter: ${{ inputs.includes }}
     - name: apply excludes
       id: excludes
