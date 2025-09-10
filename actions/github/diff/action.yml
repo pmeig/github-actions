@@ -44,26 +44,26 @@ runs:
     - name: find files
       id: files
       shell: bash
-      working-directory: tmp
       run: |
-        files=''
-        from='${{ inputs.origin }}'
-        to='${{ inputs.target }}'
-        if [ -z "$from" ]
-        then
-          from='${{ steps.branch.outputs.current }}'
-        fi
-        if [ -z "$to" ]
-        then
-          to='${{ steps.branch.outputs.target }}'
-        fi
-        compare=$(curl -L -H "Accept: application/vnd.github+json" \
-        -H "Authorization: Bearer ${{ github.token }}" -H \
-        "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/${{ github.repository }}/compare/$to...$from )
-        for name in $(echo "$compare" | jq -r '.files[].filename')
-        do
-          files="$name $files"
-        done
+#        files=''
+#        from='${{ inputs.origin }}'
+#        to='${{ inputs.target }}'
+#        if [ -z "$from" ]
+#        then
+#          from='${{ steps.branch.outputs.current }}'
+#        fi
+#        if [ -z "$to" ]
+#        then
+#          to='${{ steps.branch.outputs.target }}'
+#        fi
+#        compare=$(curl -L -H "Accept: application/vnd.github+json" \
+#        -H "Authorization: Bearer ${{ github.token }}" -H \
+#        "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/${{ github.repository }}/compare/$to...$from )
+#        for name in $(echo "$compare" | jq -r '.files[].filename')
+#        do
+#          files="$name $files"
+#        done
+        gh pr view ${{ github.event.pull_request.number }} --json files -q '.files.[].path'
         echo "path=$(echo $files)" >> $GITHUB_OUTPUT
     - name: apply includes
       id: includes
