@@ -44,7 +44,7 @@ runs:
     - name: find files
       id: files
       shell: bash
-      if: ${{ !startsWith(github.event_name, 'pull_request') && github.event.pull_request.merged == 'false' }}
+      if: ${{ github.event.pull_request.merged == false }}
       run: |
         files=''
         from='${{ inputs.origin }}'
@@ -68,7 +68,7 @@ runs:
     - name: find files pull request
       id: pull-request-files
       shell: bash
-      if: ${{ startsWith(github.event_name, 'pull_request') && github.event.pull_request.merged == 'true'  }}
+      if: ${{ github.event.pull_request.merged == true }}
       run: |
         diff=$(gh pr view ${{ github.event.pull_request.number }} --json files -q '.files.[].path')
         files=''
