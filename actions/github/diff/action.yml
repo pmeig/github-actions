@@ -40,7 +40,6 @@ runs:
   steps:
     - name: get branch
       id: branch
-      if: ${{ inputs.target != '' || inputs.origin != '' }}
       uses: pmeig/github-actions/actions/github/branch@main
     - name: find files
       id: files
