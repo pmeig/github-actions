@@ -55,11 +55,11 @@ runs:
         npm i -g yarn
     - name: remote
       shell: bash
-      if: ${{ inputs.remote-user != '' && inputs.remote-pwd != '' }}
+      if: ${{ inputs.remote-user != '' && inputs.remote-password != '' }}
       run: |
         ${{ steps.manager.outputs.value }} config set registry=https://registry.npmjs.org/
-        export REMOTE_AUTH=$(echo -n ${{ inputs.remote-user }}:${{ inputs.remote-pwd }} | base64 -w0)
-        echo "//registry.npmjs.org/:_authToken=$REMOTE_AUTH" >> ~/.npmrc
+        export REMOTE_AUTH=$(echo -n ${{ inputs.remote-user }}:${{ inputs.remote-password }} | base64 -w0)
+        echo "//registry.npmjs.org/:_authToken=${{ inputs.remote-password }}" >> ~/.npmrc
     - shell: bash
       name: artifactory settings
       if: ${{ inputs.artifactory-user != '' && inputs.artifactory-password != '' }}
