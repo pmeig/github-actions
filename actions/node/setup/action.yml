@@ -27,6 +27,10 @@ inputs:
     description: token use to connect at remote
     required: false
     default: ''
+  remote-user:
+    description: user use to connect at remote
+    required: false
+    default: ''
   workspace:
     default: '.'
     required: false
@@ -54,13 +58,19 @@ runs:
       if: ${{ inputs.remote-token != '' }}
       run: |
         ${{ steps.manager.outputs.value }} config set registry=https://registry.npmjs.org/
-        echo "//registry.npmjs.org/:_authToken=${{ inputs.remote-token }}" >> ~/.npmrc
+        if [ -n "${{ inputs.remote-user }}" ]
+        then
+          export AUTH_REMOTE=$(echo -n ${{ inputs.remote-user }}:${{ inputs.remote-password }} | base64 -w0)
+          echo "//registry.npmjs.org/:_auth=$AUTH_REMOTE" >> ~/.npmrc
+        else
+          echo "//registry.npmjs.org/:_authToken=${{ inputs.remote-token }}" >> ~/.npmrc
+        fi
+
     - shell: bash
       name: artifactory settings
       if: ${{ inputs.artifactory-user != '' && inputs.artifactory-password != '' }}
       run: |
         export AUTH=$(echo -n ${{ inputs.artifactory-user }}:${{ inputs.artifactory-password }} | base64 -w0)
-        echo "NODE_AUTH_TOKEN=$AUTH" >> $GITHUB_ENV
         ${{ steps.manager.outputs.value }} config set @pmeig:registry=${{ inputs.artifactory-url }}/artifactory/
         {
           echo //${{ inputs.artifactory-url }}/artifactory/npm-snapshots-local:_auth=${AUTH}
