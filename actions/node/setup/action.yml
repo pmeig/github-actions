@@ -51,7 +51,7 @@ runs:
         npm i -g yarn
     - name: remote
       shell: bash
-      if: ${{ inputs.remote-user != '' && inputs.remote-password != '' }}
+      if: ${{ inputs.remote-token != '' }}
       run: |
         ${{ steps.manager.outputs.value }} config set registry=https://registry.npmjs.org/
         echo "//registry.npmjs.org/:_authToken=${{ inputs.remote-token }}" >> ~/.npmrc
