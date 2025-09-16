@@ -31,9 +31,6 @@ outputs:
   parents:
     value: ${{ steps.parents.outputs.path }}
     description: all parents files modify
-  current:
-    value: ${{ steps.parents.outputs.origin }}
-    description: is current folder modify
 
 runs:
   using: composite
@@ -98,28 +95,19 @@ runs:
       shell: bash
       run: |
         parents=' '
-        origin='false'
-        for name in $(echo "${{ steps.excludes.outputs.value }}")
+        for file in ${{ steps.excludes.outputs.value }}
         do
-          if [[ "$name" == *"/"* ]]
+          parent=$(dirname $file)
+          while [ "$parent" != "$GITHUB_WORKSPACE" ] && [ ! -f "$parent/package.json" ] && [ ! -f "$parent/pom.xml" ]
+          do
+            parent=$(dirname $parent)
+          done
+          if [[ " $parents " != *" $parent "* ]]
           then
-            parent=$(echo "$name" | cut -d'/' -f1)
-            if [ "$parent" == 'src' ]
-            then
-              origin=true
-            else
-              if [ "$parent" != ".github" ] && [[ "$parents" != *" $parent "* ]]
-              then
-                parents="$parents$parent "
-              fi
-            fi
-          else
-            origin=true
+            parents="$parents $parent"
           fi
         done
-        parents=$(echo $parents)
         echo "path=$parents" >> $GITHUB_OUTPUT
-        echo "origin=$origin" >> $GITHUB_OUTPUT
     - name: clean diff
       shell: bash
       run: |
