@@ -47,7 +47,7 @@ runs:
         then
           dependencies='{}'
         fi
-        echo "value=$(echo $dependencies | jq -r 'keys | map(select(. | startswith("${{ inputs.prefix }}")) | join(" ")')" >> $GITHUB_OUTPUT
+        echo "value=$(echo $dependencies | jq -r 'keys | map(select(. | startswith("${{ inputs.prefix }}"))) | join(" ")')" >> $GITHUB_OUTPUT
     - name: listed dev dependencies
       if: ${{ inputs.dev == 'true' }}
       id: dev-dependencies
@@ -59,7 +59,7 @@ runs:
         then
           dependencies='{}'
         fi
-        echo "value=$(echo $dependencies | jq -r 'keys | map(select(. | startswith("${{ inputs.prefix }}")) | join(" ")')" >> $GITHUB_OUTPUT
+        echo "value=$(echo $dependencies | jq -r 'keys | map(select(. | startswith("${{ inputs.prefix }}"))) | join(" ")')" >> $GITHUB_OUTPUT
     - name: listed peer dependencies
       if: ${{ inputs.dev == 'true' }}
       id: peer-dependencies
@@ -71,7 +71,7 @@ runs:
         then
           dependencies='{}'
         fi
-        echo "value=$(echo $dependencies | jq -r 'keys | map(select(. | startswith("${{ inputs.prefix }}")) | join(" ")')" >> $GITHUB_OUTPUT
+        echo "value=$(echo $dependencies | jq -r 'keys | map(select(. | startswith("${{ inputs.prefix }}"))) | join(" ")')" >> $GITHUB_OUTPUT
     - name: retrieve all sub dependencies
       id: sub-dependencies
       if: ${{ steps.dependencies.outputs.value != '' || steps.dev-dependencies.outputs.value != '' || steps.peer-dependencies.outputs.value != '' }}
