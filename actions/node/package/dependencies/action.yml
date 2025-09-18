@@ -85,11 +85,27 @@ runs:
          then
            already="$already$depend "
            ${{ inputs.subpath-resolver }}
-           dependencies=$(jq -rc '.dependencies | keys | map(select(. | startswith("${{ inputs.prefix }}")))' $package/package.json)
-           devDependencies=$(jq -rc '.devDependencies | keys | map(select(. | startswith("${{ inputs.prefix }}")))' $package/package.json)
-           dependencies=$(echo $dependencies | jq -rc --argjson concat "$devDependencies" '. + $concat')
+           dependencies=$(jq -rc '.dependencies')
+           if [ "$dependencies" == 'null' ]
+           then
+            dependencies='{}'
+           fi
+           devDependencies=$(jq -rc '.devDependencies' $package/package.json)
+           if [ "$devDependencies" == 'null' ]
+           then
+            devDependencies='{}'
+           fi
+           peerDependencies=$(jq -rc '.peerDependencies' $package/package.json)
+           if [ "$peerDependencies" == 'null' ]
+           then
+            peerDependencies='{}'
+           fi
+           dependencies=$(echo $dependencies | jq -rc 'keys | map(select(. | startswith("${{ inputs.prefix }}")))')
+           devDependencies=$(echo $devDependencies | jq -rc 'keys | map(select(. | startswith("${{ inputs.prefix }}")))')
+           peerDependencies=$(echo $peerDependencies | jq -rc 'keys | map(select(. | startswith("${{ inputs.prefix }}")))')
+           dependencies=$(echo $dependencies | jq -rc --argjson concat "$devDependencies" --argjson peer "$peerDependencies" '. + $concat + $peer')
            module="{\"name\":\"$depend\",\"dependencies\": $dependencies, \"path\": \"$package\"}"
-           json=$(echo "$json" | jq -c ". + [$module]")
+           json=$(echo "$json" | jq -c --argjson item "$module" '. + [$item]')
            if [ "$dependencies" != '[]' ]
            then
              depends="$depends $(echo $dependencies | jq -c '.[]')"
