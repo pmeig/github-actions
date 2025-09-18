@@ -87,7 +87,6 @@ runs:
           depends=$(echo "$depends" | cut -d' ' -f2-)
         done
         depends="$depend $depends"
-        while
         already=' '
         while [ -n "$depends" ]
         do
@@ -97,7 +96,7 @@ runs:
          then
            already="$already$depend "
            ${{ inputs.subpath-resolver }}
-           dependencies=$(jq -rc '.dependencies')
+           dependencies=$(jq -rc '.dependencies' $package/package.json)
            if [ "$dependencies" == 'null' ]
            then
             dependencies='{}'
@@ -131,7 +130,11 @@ runs:
       run: |
         built=' '
         value=''
-        modules=$(echo '${{ steps.sub-dependencies.outputs.value }}$' | jq -rc 'join(" ")')
+        modules=$(echo '${{ steps.sub-dependencies.outputs.value }}' | jq -rc '.[]')
+        if [[ "$modules" != *" "* ]]
+        then
+          modules="$modules "
+        fi
         while [ -n "$modules" ]
         do
           module=$(echo "$modules" | cut -d' ' -f1)
