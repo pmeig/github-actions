@@ -130,11 +130,11 @@ runs:
       run: |
         built=' '
         value=''
-        modules=$(echo '${{ steps.sub-dependencies.outputs.value }}' | jq -rc '.[]')
-        if [[ "$modules" != *" "* ]]
-        then
-          modules="$modules "
-        fi
+        modules=''
+        for context in $(echo '${{ steps.sub-dependencies.outputs.value }}' | jq -rc '.[]')
+        do
+          modules="$modules$context "
+        done
         while [ -n "$modules" ]
         do
           module=$(echo "$modules" | cut -d' ' -f1)
@@ -142,7 +142,7 @@ runs:
           name=$(echo $module | jq -r '.name')
           dependencies=$(echo $module | jq -r '.dependencies')
           valid='true'
-          if [ "$dependencies" != 'null' ]
+          if [ "$valid" == 'true' ] && [ "$dependencies" != 'null' ]
           then
             dependencies=$(echo $dependencies | jq -rc 'join(" ")')
             while [ -n "$dependencies" ]
