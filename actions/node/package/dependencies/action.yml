@@ -116,7 +116,7 @@ runs:
       id: priority
       shell: bash
       run: |
-        built=' '
+        built="$(jq -r '((.dependencies | keys) + (.devDependencies | keys)) | join(" ")' package.json) "
         value=''
         modules=''
         for context in $(echo '${{ steps.sub-dependencies.outputs.value }}' | jq -rc '.[]')
@@ -128,27 +128,24 @@ runs:
           module=$(echo "$modules" | cut -d' ' -f1)
           modules=$(echo "$modules" | cut -d' ' -f2-)
           name=$(echo $module | jq -r '.name')
-          dependencies=$(echo $module | jq -r '.dependencies')
+          dependencies=$(echo $module | jq -r '.dependencies | if . == null then [] else . end')
           valid='true'
-          if [ "$valid" == 'true' ] && [ "$dependencies" != 'null' ]
-          then
-            dependencies=$(echo $dependencies | jq -rc 'join(" ")')
-            while [ -n "$dependencies" ]
-            do
-              dependency=$(echo "$dependencies" | cut -d' ' -f1)
-              dependencies=$(echo "$dependencies" | cut -d' ' -f2-)
-              if [[ " $built " != *" $dependency "* ]]
-              then
-                valid='false'
-              fi
-            done
-          fi
+          dependencies="$(echo $dependencies | jq -rc 'join(" ")') "
+          while [ "$valid" == 'true' ] && [ -n "$dependencies" ]
+          do
+            dependency=$(echo "$dependencies" | cut -d' ' -f1)
+            dependencies=$(echo "$dependencies" | cut -d' ' -f2-)
+            if [[ " $built " != *" $dependency "* ]]
+            then
+              valid='false'
+            fi
+          done
           if [ "$valid" == 'true' ]
           then
             built="$built$name "
             value="$value $(echo $module | jq -r '.path')"
           else
-            modules="$modules $module "
+            modules="$modules$module "
           fi
         done
         echo "value=${value:1}" >> $GITHUB_OUTPUT
