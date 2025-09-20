@@ -96,30 +96,18 @@ runs:
          then
            already="$already$depend "
            ${{ inputs.subpath-resolver }}
-           dependencies=$(jq -rc '.dependencies' $package/package.json)
-           if [ "$dependencies" == 'null' ]
+           if [ -n "$package" ] && [ "$package" != 'null' ]
            then
-            dependencies='{}'
-           fi
-           devDependencies=$(jq -rc '.devDependencies' $package/package.json)
-           if [ "$devDependencies" == 'null' ]
-           then
-            devDependencies='{}'
-           fi
-           peerDependencies=$(jq -rc '.peerDependencies' $package/package.json)
-           if [ "$peerDependencies" == 'null' ]
-           then
-            peerDependencies='{}'
-           fi
-           dependencies=$(echo $dependencies | jq -rc 'keys | map(select(. | startswith("${{ inputs.prefix }}")))')
-           devDependencies=$(echo $devDependencies | jq -rc 'keys | map(select(. | startswith("${{ inputs.prefix }}")))')
-           peerDependencies=$(echo $peerDependencies | jq -rc 'keys | map(select(. | startswith("${{ inputs.prefix }}")))')
-           dependencies=$(echo $dependencies | jq -rc --argjson concat "$devDependencies" --argjson peer "$peerDependencies" '. + $concat + $peer')
-           module="{\"name\":\"$depend\",\"dependencies\": $dependencies, \"path\": \"$package\"}"
-           json=$(echo "$json" | jq -c --argjson item "$module" '. + [$item]')
-           if [ "$dependencies" != '[]' ]
-           then
-             depends="$depends $(echo $dependencies | jq -c '.[]')"
+             dependencies=$(jq -rc '.dependencies | if . == null then {} else . end | keys | map(select(. | startswith("@pmeig/"))) | if . == null then [] else . end' $package/package.json)
+             devDependencies=$(jq -rc '.devDependencies | if . == null then {} else . end | keys | map(select(. | startswith("@pmeig/"))) | if . == null then [] else . end' $package/package.json)
+             peerDependencies=$(jq -rc '.peerDependencies | if . == null then {} else . end | keys | map(select(. | startswith("@pmeig/"))) | if . == null then [] else . end' $package/package.json)
+             dependencies=$(echo $dependencies | jq -rc --argjson concat "$devDependencies" --argjson peer "$peerDependencies" '. + $concat + $peer')
+             module="{\"name\":\"$depend\",\"dependencies\": $dependencies, \"path\": \"$package\"}"
+             json=$(echo "$json" | jq -c --argjson item "$module" '. + [$item]')
+             if [ "$dependencies" != '[]' ]
+             then
+               depends="$depends $(echo $dependencies | jq -r 'join(" ")') "
+             fi
            fi
          fi
         done
@@ -160,7 +148,7 @@ runs:
             built="$built$name "
             value="$value $(echo $module | jq -r '.path')"
           else
-            modules="$modules $module"
+            modules="$modules $module "
           fi
         done
         echo "value=${value:1}" >> $GITHUB_OUTPUT
