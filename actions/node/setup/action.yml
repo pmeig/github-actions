@@ -3,7 +3,7 @@ description: prepare setup to node
 
 inputs:
   version:
-    default: '22'
+    default: '24'
     description: version node do you want to setup
     required: false
   branch:
