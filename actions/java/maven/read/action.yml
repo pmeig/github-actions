@@ -1,0 +1,28 @@
+name: read pom
+description: read in pom.xml with evaluate
+
+
+inputs:
+  expression:
+    required: true
+    description: expression do you want read like project.artifactId
+  workspace:
+    required: false
+    description: localization of your pom
+    default: '.'
+
+outputs:
+  value:
+    description: the value of expression do you want extract
+    value: ${{ steps.command.outputs.value }}
+
+runs:
+  using: composite
+  steps:
+    - name: execute command for ${{ inputs.expression }}
+      id: command
+      working-directory: ${{ inputs.workspace }}
+      shell: bash
+      run: |
+        result=$(mvn help:evaluate '-Dexpression=${{ inputs.expression }}' -q -DforceStdout)
+        echo "value=$result" >> $GITHUB_OUTPUT
