@@ -18,13 +18,13 @@ inputs:
     default: '.'
 
 outputs:
-  value:
+  semver:
     value: ${{ steps.fragment.outputs.version }}
     description: version without suffix
-  suffix:
-    value:
+  release-suffix:
+    value: ${{ steps.release-suffix.outputs.value }}
     description: suffix use for environment
-  current-suffix:
+  suffix:
     value: ${{ steps.fragment.outputs.suffix }}
     description: current suffix on version extracted
   version:
@@ -48,7 +48,7 @@ runs:
           tag=${tag:1:${#tag} - 1}
           echo "version=$tag" >> $GITHUB_OUTPUT
         fi
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && hashFiles('**/pom.xml') == '' && hashFiles('**/package.json') == '' }}
       name: checkout current project
     - name: get version in pom
@@ -96,6 +96,7 @@ runs:
         fi
     - name: release suffix
       id: release-suffix
+      if: ${{ steps.fragment.outputs.suffix }}
       uses: pmeig/github-actions/actions/context/version/suffix@main
       with:
         env: ${{ inputs.env }}

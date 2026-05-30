@@ -1,31 +1,53 @@
 name: get latest release
 description: 'get latest release'
 inputs:
-  api_version:
+  api-version:
     required: false
     description: "api version"
-    default: "2022-11-28"
+    default: "2026-03-10"
   accept:
     required: false
     default: "application/vnd.github+json"
     description: "accept"
+  per-page:
+    required: false
+    description: number item by page
+    default: "30"
+
+  pre-release:
+    required: false
+    default: "false"
+    description: the branch do you want extract release
 
 outputs:
   releaseName:
-    value: ${{ steps.release.outputs.releaseName }}
+    value: ${{ steps.latest.outputs.releaseName }}
     description: latest release name
 
 runs:
   using: composite
   steps:
-    - name: release
-      id: release
+    - name: latest
+      id: latest
+      if: ${{ inputs.pre-release != 'false' }}
+      shell: bash
+      run: |
+        release=$(curl -L \
+            -H "Accept: ${{ inputs.accept }}" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: ${{ inputs.api-version }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/latest)
+        releaseName=$(echo $release | jq '{tag_name, body}')
+        echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
+    - name: filter
+      id: filtered
+      if: ${{ inputs.pre-release == 'true' }}
       shell: bash
       run: |
         release=$(curl -L \
             -H "Accept: ${{ inputs.accept }}" \
             -H "Authorization: Bearer ${{ github.token }}" \
             -H "X-GitHub-Api-Version: ${{ inputs.api_version }}" \
-            https://api.github.com/repos/${{ github.repository }}/releases/latest)
-        releaseName=$(echo $release | jq '.tag_name')
-        echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
+            https://api.github.com/repos/${{ github.repository }}/releases?per-page=${{ inputs.per-page }})
+        releaseName=$(echo $release | jq 'map(select(.prerelease == ${{ inputs.pre-release }})) \
+        | .[0] | { tag_name, body }')

@@ -38,19 +38,19 @@ runs:
           echo "jacoco=$jacoco" >> $GITHUB_OUTPUT
         fi
     - name: get latest version jacoco
-      uses: pmeig/github-actions/actions/java/maven/version/latest@compound
+      uses: pmeig/github-actions/actions/java/maven/version/latest@main
       id: version
       with:
         groupId: org.jacoco
         artifactId: jacoco-maven-plugin
     - name: insert jacoco plugin version
-      uses: adeo/hf3p--ba-actions/actions/java/maven/insert/properties@compound
+      uses: pmeig/github-actions/actions/java/maven/insert/properties@main
       if: ${{ steps.context.outputs.jacoco != '' }}
       with:
         workspace: ${{ inputs.workspace }}
         properties: sonar.jacoco.version=${{ steps.version.outputs.latest }}
     - name: insert plugin jacoco
-      uses: adeo/hf3p--ba-actions/actions/java/maven/insert/plugin@compound
+      uses: pmeig/github-actions/actions/java/maven/insert/plugin@main
       if: ${{ steps.context.outputs.jacoco != '' }}
       with:
         workspace: ${{ inputs.workspace }}
