@@ -11,6 +11,9 @@ outputs:
   modules:
     description: simple description for each module
     value: ${{ steps.modules.outputs.value }}
+  value:
+    description: combine all values by artifactId
+    value: ${{ steps.architecture.outputs.value }}
 
 runs:
   using: composite
@@ -67,4 +70,20 @@ runs:
         
         echo "value=$dependencies" >> $GITHUB_OUTPUT
         echo "depends=$depends" >> $GITHUB_OUTPUT
-      
+    - name: combine
+      id: architecture
+      shell: bash
+      run: |
+        architecture='{}'
+        for module in $(echo '${{ steps.modules.outputs.value }}' | jq -rc '.[]' )
+        do
+          artifactId=$(echo "$module" | jq -rc '.artifactId')
+          dependencies=$(echo '${{ steps.dependencies.outputs.value }}' | jq -rc --arg key "$artifactid" '.[$key]')
+          depends=$(echo '${{ steps.dependencies.outputs.depends }}' | jq -rc --arg key "$artifactid" '.[$key]')
+        
+          arch=$(jq -rc --argjson metadata "$module" --argjson dependencies "$dependencies"\
+          --argjson depends "$depends" '{ "metadata": $metadata, "dependencies": $dependencies, "depends" $depends}')
+          architecture=$(echo "$architecture" | jq -rc --argjson value "$arch" --arg key "$artifactId" '. + { ($key): $value}')
+        done
+        
+        echo "value=$architecture" >> $GITHUB_OUTPUT
