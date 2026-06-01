@@ -27,7 +27,7 @@ runs:
       run:
         echo "value=minor" >> $GITHUB_OUTPUT
     - name: type patch
-      if: ${{ inputs.env-target == inputs.env && (inputs.env == 'prod' || inputs.env == 'prep') }}
+      if: ${{ inputs.env != 'dev' && inputs.env-target == inputs.env }}
       id: patch
       shell: bash
       run:
