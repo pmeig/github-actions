@@ -6,10 +6,15 @@ inputs:
   expression:
     required: true
     description: expression do you want read like project.artifactId
+  module:
+    required: false
+    description: module do you want apply expression
+    default: ''
   workspace:
     required: false
-    description: localization of your pom
     default: '.'
+    description: localization of your pom
+
 
 outputs:
   value:
@@ -21,8 +26,13 @@ runs:
   steps:
     - name: execute command for ${{ inputs.expression }}
       id: command
-      working-directory: ${{ inputs.workspace }}
       shell: bash
+      working-directory: ${{ inputs.workspace }}
       run: |
-        result=$(mvn help:evaluate '-Dexpression=${{ inputs.expression }}' -q -DforceStdout)
+        options=''
+        if [ -n '${{ inputs.module }}' ]
+        then
+          options='-pl :${{ inputs.module }}'
+        fi
+        result=$(mvn help:evaluate $options '-Dexpression=${{ inputs.expression }}' -q -DforceStdout)
         echo "value=$result" >> $GITHUB_OUTPUT

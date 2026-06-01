@@ -54,16 +54,11 @@ runs:
     - name: get version in pom
       id: pom
       if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && hashFiles('**/pom.xml') != '' }}
-      shell: bash
-      working-directory: ${{ inputs.workspace }}
-      run: |
-        options=''
-        if [ -n '${{ inputs.module }}' ]
-        then
-          options='-pl :${{ inputs.module }}'
-        fi
-        version="$(mvn help:evaluate -Dexpression='project.version' -q -DforceStdout=true $options)"
-        echo "version=$version" >> $GITHUB_OUTPUT
+      uses: pmeig/github-actions/actions/java/maven/read@main
+      with:
+        workspace: ${{ inputs.workspace }}
+        module: ${{ inputs.module }}
+        expression: project.version
     - name: get version in package
       id: node
       if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && steps.pom.outputs.version == '' }}
