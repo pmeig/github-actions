@@ -27,7 +27,7 @@ runs:
       id: modules
       shell: bash
       run: |
-        mvn dependency:tree -DoutputType=tgf -DappendOutput=true -DoutputFile=output.tgf
+        mvn dependency:tree -DoutputType=tgf -DappendOutput=true -DoutputFile=output.tgf -q
         workspace=$(pwd)
         artifactId='{}'
         
