@@ -32,10 +32,26 @@ runs:
         java-version: ${{ inputs.java }}
         distribution: 'temurin'
         cache: maven
-    - name: add configuration maven to connect at jfrog
+    - name: add configuration maven to create server to deploy
       uses: pmeig/github-actions/actions/java/setup/settings@main
       if: ${{ inputs.artifactory-user != '' && inputs.artifactory-password != '' }}
       with:
         artifactory-user: ${{ inputs.artifactory-user }}
         artifactory-password: ${{ inputs.artifactory-password }}
         artifactory-url: ${{ inputs.artifactory-url }}
+    - name: Configure Maven settings
+      shell: bash
+      if: ${{ inputs.artifactory-user == '' || inputs.artifactory-password == '' }}
+      run: |
+        mkdir -p ~/.m2
+        cat > ~/.m2/settings.xml << EOF
+        <settings xsi:schemaLocation=\"$schemaLocation\" xmlns=\"http://maven.apache.org/SETTINGS/1.1.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">
+          <servers>
+            <server>
+              <id>github</id>
+              <username>${{ github.repository_owner }}</username>
+              <password>\${env.GITHUB_TOKEN}</password>
+            </server>
+          </servers>
+        </settings>
+        EOF

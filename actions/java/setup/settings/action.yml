@@ -19,13 +19,13 @@ runs:
       shell: bash
       id: settings
       run: |
-        echo "JFROG_USER=${{inputs.artifactory-user}}" >> $GITHUB_ENV
-        echo "JFROG_PASSWORD=${{inputs.artifactory-password}}" >> $GITHUB_ENV
-        server="<server><id>pmeig-artifactory-@env@</id><username>\${env.JFROG_USER}</username><password>\${env.JFROG_PASSWORD}</password></server>"
-        servers="<servers>${server//@env@/releases}${server//@env@/snapshots}${server//@env@/mirror}</servers>"
-        id="pmeig-artifactory"
+        echo "ARTIFACTORY_USER=${{inputs.artifactory-user}}" >> $GITHUB_ENV
+        echo "ARTIFACTORY_PASSWORD=${{inputs.artifactory-password}}" >> $GITHUB_ENV
+        server="<server><id>artifactory-@env@</id><username>\${env.ARTIFACTORY_USER}</username><password>\${env.ARTIFACTORY_PASSWORD}</password></server>"
+        servers="<servers>${server//@env@/releases}${server//@env@/snapshots}${server//@env@/mirror}<server><id>github</id><username>${{ github.repository_owner }}</username><password>\${env.GITHUB_TOKEN}</password></server></servers>"
+        id="artifactory"
         enable="<@env@><enabled>true</enabled></@env@>"
-        repository="<@prefix@epositories><@prefix@epository><id>pmeig-artifactory-mirror</id><name>Pmeig Artifactory Mirror Repository</name><url>${{ inputs.artifactory-url }}</url>${enable//@env@/releases}${enable//@env@/snapshots}</@prefix@epository></@prefix@epositories>"
+        repository="<@prefix@epositories><@prefix@epository><id>pmeig-artifactory-mirror</id><name>Artifactory Mirror Repository</name><url>${{ inputs.artifactory-url }}</url>${enable//@env@/releases}${enable//@env@/snapshots}</@prefix@epository></@prefix@epositories>"
         profiles="<profiles><profile><id>$id</id>${repository//@prefix@/r}${repository//@prefix@/pluginR}</profile></profiles><activeProfiles><activeProfile>$id</activeProfile></activeProfiles>"
         echo "servers=${servers}" >> $GITHUB_OUTPUT
         echo "profiles=${profiles}" >> $GITHUB_OUTPUT
