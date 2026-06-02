@@ -1,5 +1,5 @@
-name: configuration pom sonatype
-description: configure your pom to use sonatype
+name: configuration pom Sonatype
+description: configure your pom to use Sonatype
 
 runs:
   using: composite

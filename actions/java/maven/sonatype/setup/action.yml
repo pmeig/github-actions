@@ -1,13 +1,13 @@
-name: sonatype setup
+name: Sonatype setup
 description: prepare settings
 
 inputs:
   username:
     required: false
-    description: username to connect at sonatype or expose by env SONATYPE_USERNAME
+    description: username to connect at Sonatype or expose by env SONATYPE_USERNAME
   password:
     required: false
-    description: password to connect at sonatype or expose by env SONATYPE_PASSWORD
+    description: password to connect at Sonatype or expose by env SONATYPE_PASSWORD
   gpg-secret:
     required: false
     description: gpg server import the secret key in base64 or expose by env GPG_SECRET
@@ -21,7 +21,7 @@ inputs:
 outputs:
   settings:
     value: ${{ steps.settings.outputs.path }}
-    description: path of setting sonatype
+    description: path of setting Sonatype
 
 runs:
   using: composite

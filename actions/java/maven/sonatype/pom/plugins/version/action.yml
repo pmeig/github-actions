@@ -10,7 +10,7 @@ runs:
       with:
         artifactId: maven-gpg-plugin
         groupId: org.apache.maven.plugins
-    - name: sonatype version
+    - name: Sonatype version
       id: sonatype
       uses: pmeig/github-actions/actions/java/maven/version/latest@main
       with:

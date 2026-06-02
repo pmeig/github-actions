@@ -1,5 +1,5 @@
-name: sonatype required plugins
-description: apply in your pom all missing required plugins for sonatype
+name: Sonatype required plugins
+description: apply in your pom all missing required plugins for Sonatype
 
 runs:
   using: composite

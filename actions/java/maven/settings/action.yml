@@ -1,5 +1,5 @@
 name: generate settings
-description: prepare to deploy by sonatype
+description: prepare to deploy by Sonatype
 
 inputs:
   filename:
