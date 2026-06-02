@@ -1,0 +1,73 @@
+name: generate settings
+description: prepare to deploy by sonatype
+
+inputs:
+  filename:
+    required: false
+    description: please give me the filename do you want generate
+    default: 'settings'
+  servers:
+    required: false
+    description: all server config
+  profiles:
+    required: false
+    description: all profile config
+  body:
+    required: false
+    description: inside settings
+  actives:
+    description: profile do you active separate by space
+    required: false
+
+outputs:
+  path:
+    description: path retrieve your settings
+    value: ${{ steps.path.outputs.value }}
+
+runs:
+  using: composite
+  steps:
+    - name: servers
+      id: servers
+      if: ${{ inputs.servers != '' }}
+      shell: bash
+      run: |
+        echo 'value=<servers>${{ inputs.servers }}</servers>' >> $GITHUB_OUTPUT
+    - name: profiles
+      id: profiles
+      if: ${{ inputs.profiles != '' }}
+      shell: bash
+      run: |
+        echo 'value=<profiles>${{ inputs.profiles }}</profiles>' >> $GITHUB_OUTPUT
+    - name: actives
+      id: actives
+      if: ${{ inputs.actives != '' }}
+      shell: bash
+      run: |
+        profiles='<activeProfiles>'
+        for profile in ${{ inputs.actives }}
+        do
+          profiles="$profiles<activeProfile>$profile</activeProfile>"
+        done
+        echo "value=<activeProfiles>$profiles</activeProfiles>" >> $GITHUB_OUTPUT
+    - name: insert server in settings
+      id: path
+      shell: bash
+      run: |
+        filename='${{ inputs.filename }}''
+        if [[ "$filename" != *".xml" ]]
+        then
+          filename="$filename.xml"
+        fi
+        settings="~/.m2/$filename"
+        if [ ! -f $settings ]
+        then
+          mkdir -p "$(dirname $settings)"
+        fi
+        servers='${{ steps.servers.outputs.value }}'
+        profiles='${{ steps.profiles.outputs.value }}'
+        actives='${{ steps.actives.outputs.value }}'
+        body='${{ inputs.body }}'
+        echo "value=$settings" >> $GITHUB_OUTPUT
+        schemaLocation="http://maven.apache.org/SETTINGS/1.1.0 http://maven.apache.org/xsd/settings-1.1.0.xsd"
+        echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?><settings xsi:schemaLocation=\"$schemaLocation\" xmlns=\"http://maven.apache.org/SETTINGS/1.1.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">$servers$profiles$body$actives</settings>" >> $settings

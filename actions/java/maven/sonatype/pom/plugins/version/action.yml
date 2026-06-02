@@ -1,0 +1,22 @@
+name: version required plugins
+description: insert properties version for each plugins with latest version
+
+runs:
+  using: composite
+  steps:
+    - name: gpg version
+      id: gpg
+      uses: pmeig/github-actions/actions/java/maven/version/latest@main
+      with:
+        artifactId: maven-gpg-plugin
+        groupId: org.apache.maven.plugins
+    - name: sonatype version
+      id: sonatype
+      uses: pmeig/github-actions/actions/java/maven/version/latest@main
+      with:
+        artifactId: central-publishing-maven-plugin
+        groupId: org.sonatype.central
+    - name: insert version in pom
+      uses: pmeig/github-actions/actions/java/maven/insert/properties@main
+      with:
+        properties: 'central-publishing-maven-plugin.version=${{ steps.sonatype.outputs.latest }} maven-gpg-plugin.version=${{ steps.gpg.outputs.latest }}'

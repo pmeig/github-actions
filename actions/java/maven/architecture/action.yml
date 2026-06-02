@@ -86,4 +86,5 @@ runs:
           architecture=$(echo "$architecture" | jq -rc --argjson value "$arch" --arg key "$artifactId" '. + { ($key): $value}')
         done
         
+        find . -name output.tgf -delete
         echo "value=$architecture" >> $GITHUB_OUTPUT

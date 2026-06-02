@@ -1,0 +1,43 @@
+name: sonatype required plugins
+description: apply in your pom all missing required plugins for sonatype
+
+runs:
+  using: composite
+  steps:
+    - name: bump your pom to prepare deployment
+      id: missing-plugins
+      if: ${{ hashFiles('**/pom.xml') != '' }}
+      shell: bash
+      run: |
+        plugins=''
+        if [ -z "$(grep 'maven-javadoc-plugin' pom.xml)" ]
+        then
+          plugins='<groupId>org.apache.maven.plugins</groupId><artifactId>maven-javadoc-plugin</artifactId><configuration><source>${maven.compiler.source}</source></configuration>'
+          plugins="$plugins<executions><execution><id>attach-javadocs</id><goals><goal>jar</goal></goals></execution></executions>"
+          plugins="<plugin>$plugins</plugin>"
+        fi
+        if [ -z "$(grep 'maven-source-plugin' pom.xml)" ]
+        then
+          plugin='<groupId>org.apache.maven.plugins</groupId><artifactId>maven-source-plugin</artifactId>'
+          execution='<execution><id>attach-sources</id><goals><goal>jar-no-fork</goal></goals></execution>'
+          plugin="$plugin<executions>$execution</executions>"
+          plugins="$plugins<plugin>$plugin</plugin>"
+        fi
+        if [ -z "$(grep 'maven-gpg-plugin' pom.xml)" ]
+        then
+          plugin='<groupId>org.apache.maven.plugins</groupId><artifactId>maven-gpg-plugin</artifactId><version>${maven-gpg-plugin.version}</version>'
+          plugin="$plugin<executions><execution><id>attach-javadocs</id><goals><goal>jar</goal></goals></execution></executions>"
+          plugins="$plugins<plugin>$plugin</plugin>"
+        fi
+        if [ -z "$(grep 'central-publishing-maven-plugin' pom.xml)" ]
+        then
+          plugin='<groupId>org.sonatype.central</groupId><artifactId>central-publishing-maven-plugin</artifactId><version>${central-publishin-maven-plugin.version}</version><extensions>true</extensions>'
+          plugin="$plugin<configuration><publishingServerId>central</publishingServerId><autoPublish>true</autoPublish><waitUntilPublished>true</waitUntilPublished></configuration>"
+          plugins="$plugins<plugin>$plugin</plugin>"
+        fi
+        echo "value=$plugins" >> $GITHUB_OUTPUT
+    - name: apply plugins in pom.xml
+      uses: pmeig/github-actions/actions/java/maven/insert/plugin@main
+      if: ${{ steps.missing-plugins.outputs.value != '' }}
+      with:
+        plugins: ${{ steps.missing-plugins.outputs.value }}

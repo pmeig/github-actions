@@ -1,0 +1,67 @@
+name: sonatype setup
+description: prepare settings
+
+inputs:
+  username:
+    required: false
+    description: username to connect at sonatype or expose by env SONATYPE_USERNAME
+  password:
+    required: false
+    description: password to connect at sonatype or expose by env SONATYPE_PASSWORD
+  gpg-key:
+    required: false
+    description: the key use for gpg or expose by env GPG_KEY
+  gpg-passphrase:
+    required: false
+    description: the passphrase use for decrypt gpg or expose by en GPG_PASSPHRASE
+
+outputs:
+  settings:
+    value: ${{ steps.settings.outputs.path }}
+    description: path of setting sonatype
+
+runs:
+  using: composite
+  steps:
+    - name: create server
+      id: server
+      shell: bash
+      run: |
+        if [ -n '${{ inputs.username }}' ]
+        then
+          echo 'SONATYPE_USERNAME=${{ inputs.username }}' >> $GITHUB_ENV
+        fi
+        if [ -n '${{ inputs.password }}' ]
+        then
+          echo 'SONATYPE_PASSWORD=${{ inputs.password }}' >> $GITHUB_ENV
+        fi
+        
+        server='<server><id>central</id><username>${env.SONATYPE_USERNAME}</username>'
+        server="$serve<password>\${env.SONATYPE_PASSWORD}</password><server>
+        echo "value=$server" >> $GITHUB_OUTPUT
+    - name: active profile gpg
+      id: profile
+      shell: bash
+      run: |
+        if [ -n '${{ inputs.gpg-key }}' ]
+        then
+          echo 'GPG_KEY=${{ inputs.gpg-key }}' >> $GITHUB_ENV
+        fi
+        if [ -n '${{ inputs.gpg-passphrase }}' ]
+        then
+          echo 'GPG_PASSPHRASE=${{ inputs.gpg-passphrase }}' >> $GITHUB_ENV
+        fi
+        
+        profile='<profile><id>gpg</id><properties><gpg.keyname>${env.GPG_KEY}</gpg.keyname>'
+        profile="$profile<gpg.passphrase>\${env.GPG_PASSPHRASE}</gpg.passphrase></properties>'
+        echo "value=$profile</profile>" >> $GITHUB_OUTPUT
+    - name: create settings
+      uses: pmeig/github-actions/actions/java/maven/settings@main
+      id: settings
+      with:
+        filename: sonatype-settings
+        actives: gpg
+        profiles: ${{ steps.profile.outputs.value }}
+        servers: ${{ steps.server.outputs.value }}
+    - name: configuration pom
+      uses: pmeig/github-actions/actions/java/maven/sonatype/pom@main

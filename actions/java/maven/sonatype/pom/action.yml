@@ -1,0 +1,10 @@
+name: configuration pom sonatype
+description: configure your pom to use sonatype
+
+runs:
+  using: composite
+  steps:
+    - name: plugins
+      uses: pmeig/github-actions/actions/java/maven/sonatype/pom/plugins@main
+    - name: versions
+      uses: pmeig/github-actions/actions/java/maven/sonatype/pom/plugins/version@main
