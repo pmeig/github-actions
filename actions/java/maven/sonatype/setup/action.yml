@@ -8,6 +8,9 @@ inputs:
   password:
     required: false
     description: password to connect at sonatype or expose by env SONATYPE_PASSWORD
+  gpg-secret:
+    required: false
+    description: gpg server import the secret key in base64 or expose by env GPG_SECRET
   gpg-key:
     required: false
     description: the key use for gpg or expose by env GPG_KEY
@@ -55,6 +58,15 @@ runs:
         profile='<profile><id>gpg</id><properties><gpg.keyname>${env.GPG_KEY}</gpg.keyname>'
         profile="$profile<gpg.passphrase>\${env.GPG_PASSPHRASE}</gpg.passphrase></properties>'
         echo "value=$profile</profile>" >> $GITHUB_OUTPUT
+    - name: expose gpg secret key
+      shell: bash
+      run: |
+        if [ -n '${{ inputs.gpg-secret }}' ]
+        then
+          echo 'GPG_SECRET=${{ inputs.gpg-secret }}' >> $GITHUB_ENV
+        fi
+        
+        echo "$GPG_SECRET" | base64 --decode | gpg --import
     - name: create settings
       uses: pmeig/github-actions/actions/java/maven/settings@main
       id: settings
