@@ -71,11 +71,11 @@ runs:
           other=','
           for line in $(echo "$exclusions")
           do
-            other="$other$line"
+            other="$other,$line"
           done
         fi
         echo "sonar.cpd.exclusions=**/src/test/**" >> sonar-project.properties
-        echo "sonar.coverage.exclusions=**/configuration/**/*.java,**/model/**/*.java,**/properties/**/*.java,**/src/test/**,**/*Configuration.java,**/*Properties.java$other" >> sonar-project.properties
+        echo "sonar.coverage.exclusions=**/configuration/**,**/model/**,**/properties/**,**/src/test/**,**/*Configuration.*,**/*Properties.*,**/exception/**,**/*Exception.*,**/*Helper.*,**/helper/**$other" >> sonar-project.properties
     - name: create plugin lombok
       if: ${{ inputs.plugin-lombok == 'true' && steps.sonar.outputs.lombok != '' }}
       id: lombok

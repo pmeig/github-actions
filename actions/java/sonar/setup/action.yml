@@ -10,6 +10,10 @@ inputs:
     required: false
     default: 'true'
     description: wait quality result
+  lombok:
+    required: false
+    default: 'true'
+    description: apply lombok plugin
 
 
   workspace:
@@ -36,4 +40,5 @@ runs:
         workspace: ${{ inputs.workspace }}
         coverage-exclusions: ${{ inputs.coverage-exclusions }}
         quality: ${{ inputs.quality }}
+        plugin-lombok: ${{ inputs.lombok }}
         
