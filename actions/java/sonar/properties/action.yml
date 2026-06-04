@@ -54,13 +54,11 @@ runs:
       run: |
         echo 'sonar.projectKey=${{ github.event.repository.name }}' > sonar-project.properties
         echo 'sonar.language=${{ steps.config.outputs.lang }}' >> sonar-project.properties
-        echo 'sonar.sources=${project.build.sourceDirectory}' >> sonar-project.properties
-        echo 'sonar.tests=${project.build.testSourceDirectory}' >> sonar-project.properties
         echo 'sonar.java.coveragePlugin=${{ inputs.coverage }}' >> sonar-project.properties
         echo 'sonar.qualitygate.wait=${{ inputs.quality }}' >> sonar-project.properties
         echo 'sonar.sourceEncoding=UTF-8' >> sonar-project.properties
-        echo 'sonar.binaries=${project.build.outputDirectory}' >> sonar-project.properties
-        echo 'sonar.java.binaries=${project.build.outputDirectory}' >> sonar-project.properties
+        echo 'sonar.binaries=*/**' >> sonar-project.properties
+        echo 'sonar.java.binaries=*/**' >> sonar-project.properties
         echo 'sonar.coverage.jacoco.xmlReportPaths=./sonar-report/target/site/jacoco-aggregate/jacoco.xml' >> sonar-project.properties
         libraries='${{ inputs.libraries }}'
         if [[ "$libraries" == *"lombok"* ]]
@@ -88,7 +86,7 @@ runs:
         if [ -n "${{ inputs.coverage-exclusions }}" ]
         then
           exclusions='${{ inputs.coverage-exclusions }}'
-          other=','
+          other=''
           for line in $(echo "$exclusions")
           do
             other="$other,$line"
