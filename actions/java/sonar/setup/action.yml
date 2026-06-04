@@ -14,6 +14,10 @@ inputs:
     required: false
     default: 'true'
     description: apply lombok plugin
+  plugin:
+    required: false
+    default: 'true'
+    description: apply sonar by plugin
 
 
   workspace:
@@ -41,4 +45,8 @@ runs:
         coverage-exclusions: ${{ inputs.coverage-exclusions }}
         quality: ${{ inputs.quality }}
         plugin-lombok: ${{ inputs.lombok }}
-        
+    - name: by plugin
+      if: ${{ inputs.plugin == 'true' }}
+      uses: pmeig/github-actions/actions/java/sonar/setup/plugin@main
+      with:
+        workspace: ${{ inputs.workspace }}

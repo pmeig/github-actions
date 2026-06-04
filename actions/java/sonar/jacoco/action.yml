@@ -31,7 +31,7 @@ runs:
             report="report-aggregate"
           fi
           prepare='<execution><id>prepare-agent</id><goals><goal>prepare-agent</goal></goals></execution>'
-          reportExecution="<execution><phase>test</phase><goals><goal>$report</goal></goals></execution>"
+          reportExecution="<execution><id>report</id><phase>verify</phase><goals><goal>$report</goal></goals></execution>"
           head='<groupId>org.jacoco</groupId><artifactId>jacoco-maven-plugin</artifactId><version>${sonar.jacoco.version}</version>'
           jacoco="<plugin>$head<executions>$prepare$reportExecution</executions></plugin>"
           echo "modules=$modules" >> $GITHUB_OUTPUT

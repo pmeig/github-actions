@@ -1,0 +1,54 @@
+name: setup plugin sonar
+description: insert plugin sonar
+
+inputs:
+  workspace:
+    default: '.'
+    description: localization to apply plugin
+
+runs:
+  using: composite
+  steps:
+    - name: plugin sonar
+      id: context
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        if [ -z "$(mvn help:evaluate -Dexpression=project.build.plugins -q -DforceStdout=true -Psonar | grep sonar-maven-plugin)" ]
+        then
+          head='<groupId>org.sonarsource.scanner.maven</groupId><artifactId>sonar-maven-plugin</artifactId><version>${sonar.plugin.version}</version>'
+          sonar="<plugin>$head</plugin>"
+          echo "sonar=$sonar" >> $GITHUB_OUTPUT
+        fi
+    - name: export properties from sonar-project.properties
+      id: properties
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        if [ -f sonar-project.properties ]
+        then
+          properties=''
+          for property in $(cat sonar-project.properties)
+          do
+            properties="$property $properties"
+          done
+          echo "value=$properties" >> $GITHUB_OUTPUT
+        fi
+    - name: get latest version sonar
+      uses: pmeig/github-actions/actions/java/maven/version/latest@main
+      id: version
+      with:
+        groupId: org.sonarsource.scanner.maven
+        artifactId: sonar-maven-plugin
+    - name: insert sonar plugin version
+      uses: pmeig/github-actions/actions/java/maven/insert/properties@main
+      if: ${{ steps.context.outputs.sonar != '' }}
+      with:
+        workspace: ${{ inputs.workspace }}
+        properties: sonar.plugin.version=${{ steps.version.outputs.latest }} ${{ steps.properties.outputs.value }}
+    - name: insert plugin sonar
+      uses: pmeig/github-actions/actions/java/maven/insert/plugin@main
+      if: ${{ steps.context.outputs.sonar != '' }}
+      with:
+        workspace: ${{ inputs.workspace }}
+        plugins: ${{ steps.context.outputs.sonar }}
