@@ -6,6 +6,10 @@ inputs:
     description: workspace to install jacoco
     default: '.'
     required: false
+  modules:
+    description: specific modules do you want apply sonar, if empty, all module is taken
+    default: ''
+    required: false
 outputs:
   modules:
     value: ${{ steps.context.outputs.modules }}
@@ -17,6 +21,13 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: all modules
+      if: ${{ inputs.modules == '' }}
+      id: modules
+      shell: bash
+      run: |
+        modules=$(mvn help:evaluate -Dexpression=project.modules -q -DforceStdout=true | grep '<string>' | cut -d'>' -f2 | cut -d'<' -f1 | tr '\n' ' ')
+        echo "value=$modules" >> $GITHUB_OUTPUT
     - name: plugin jacoco
       id: context
       shell: bash
@@ -24,7 +35,7 @@ runs:
       run: |
         if [ -z "$(mvn help:evaluate -Dexpression=project.build.plugins -q -DforceStdout=true -Pjacoco | grep jacoco-maven-plugin)" ]
         then
-          modules=$(mvn help:evaluate -Dexpression=project.modules -q -DforceStdout=true | grep '<string>' | cut -d'>' -f2 | cut -d'<' -f1 | tr '\n' ' ')
+          modules='${{ steps.modules.outputs.value }}${{ inputs.modules }}'
           report='report'
           if [ -n "$modules" ]
           then
@@ -70,10 +81,11 @@ runs:
         do
           cd $module
           dependModuleVersion=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          dependArtifactId=$(mvn help:evaluate -Dexpression=project.artifactId -q -DforceStdout)
           dependVersion="<version>$dependModuleVersion</version>"
-          dependency="<dependency><groupId>$groupId</groupId><artifactId>@artifactId</artifactId>$dependVersion</dependency>"
+          dependency="<dependency><groupId>$groupId</groupId><artifactId>$dependArtifactId</artifactId>$dependVersion</dependency>"
           cd ..
-          echo "${dependency/@artifactId/$module}" >> ./sonar-report/pom.xml
+          echo "$dependency" >> ./sonar-report/pom.xml
         done
         echo "</dependencies></project>" >> ./sonar-report/pom.xml
         sed -i -E 's/<\/modules>/<module>sonar-report<\/module><\/modules>/' ./pom.xml

@@ -2,6 +2,14 @@ name: setup plugin sonar
 description: insert plugin sonar
 
 inputs:
+  host:
+    default: 'http://sonar.pmeig'
+    required: false
+    description: host of sonar
+  token:
+    default: ''
+    required: false
+    description: could be inject token by env SONAR_TOKEN
   workspace:
     default: '.'
     description: localization to apply plugin
@@ -30,10 +38,21 @@ runs:
           properties=''
           for property in $(cat sonar-project.properties)
           do
-            properties="$property $properties"
+            if [[ "$property" != *".binaries="* ]] && [[ "$property" != "sonar.sources="* ]] && [[ "$property" != "sonar.tests="* ]]
+            then
+              properties="$property $properties"
+            fi
           done
           echo "value=$properties" >> $GITHUB_OUTPUT
         fi
+    - name: insert sonar build properties step 1
+      uses: pmeig/github-actions/actions/java/maven/insert/properties@main
+      with:
+        properties: 'sonar.sources=${project.build.sourceDirectory} sonar.tests=${project.build.testSourceDirectory}'
+    - name: insert sonar build properties step 2
+      uses: pmeig/github-actions/actions/java/maven/insert/properties@main
+      with:
+        properties: 'sonar.binaries=${project.build.sourceDirectory} sonar.java.binaries=${project.build.sourceDirectory}'
     - name: get latest version sonar
       uses: pmeig/github-actions/actions/java/maven/version/latest@main
       id: version
@@ -45,7 +64,7 @@ runs:
       if: ${{ steps.context.outputs.sonar != '' }}
       with:
         workspace: ${{ inputs.workspace }}
-        properties: sonar.plugin.version=${{ steps.version.outputs.latest }} ${{ steps.properties.outputs.value }}
+        properties: sonar.plugin.version=${{ steps.version.outputs.latest }} ${{ steps.properties.outputs.value }} sonar.host.url=${env.SONAR_HOST} sonar.token=${env.SONAR_TOKEN}
     - name: insert plugin sonar
       uses: pmeig/github-actions/actions/java/maven/insert/plugin@main
       if: ${{ steps.context.outputs.sonar != '' }}

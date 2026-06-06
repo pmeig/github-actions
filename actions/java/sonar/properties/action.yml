@@ -81,7 +81,10 @@ runs:
             echo "lombok=\${project.basedir}/target/lib/lombok-*.jar" >> $GITHUB_OUTPUT
           fi
         fi
-        echo "sonar.java.libraries=$libraries" >> sonar-project.properties
+        if [ -n "$libraries" ]
+        then
+          echo "sonar.java.libraries=$libraries" >> sonar-project.properties
+        fi
         other=''
         if [ -n "${{ inputs.coverage-exclusions }}" ]
         then

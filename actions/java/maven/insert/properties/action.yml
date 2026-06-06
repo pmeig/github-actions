@@ -33,7 +33,6 @@ runs:
           name=$(echo "$property" | cut -d'=' -f1)
           value=$(echo "$property" | cut -d'=' -f2)
           regex="<$name>.*</$name>"
-          echo "name=$name value=$value property=$property regex=$regex"
           if [ -z "$(grep -e $regex pom.xml)" ]
           then
             isNewProperty=true

@@ -2,6 +2,10 @@ name: setup sonar
 description: prepare maven project to sonar
 
 inputs:
+  modules:
+    description: specific modules do you want apply sonar, if empty, all module is taken
+    default: ''
+    required: false
   coverage-exclusions:
     default: ''
     description: excludes coverage items
@@ -38,6 +42,7 @@ runs:
       id: jacoco
       with:
         workspace: ${{ inputs.workspace }}
+        modules: ${{ inputs.modules }}
     - name: sonar-project.properties
       uses: pmeig/github-actions/actions/java/sonar/properties@main
       with:
