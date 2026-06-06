@@ -42,10 +42,8 @@ runs:
         if [ -n "$kotlin" ]
         then
           language=kotlin
-          configuration='<configuration><excludes><exclude>**/*$WhenMappings.class</exclude><exclude>**/*$DefaultImpls.class</exclude><exclude>**/*Kt$*.class</exclude></excludes></configuration>'
         fi
         echo "lang=$language" >> $GITHUB_OUTPUT
-        echo "configuration=$configuration" >> $GITHUB_OUTPUT
 
     - name: create properties
       id: sonar
