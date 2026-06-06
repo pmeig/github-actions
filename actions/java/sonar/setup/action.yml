@@ -23,6 +23,15 @@ inputs:
     default: 'true'
     description: apply sonar by plugin
 
+  host:
+    default: 'http://sonar:9000'
+    required: false
+    description: host of sonar
+  token:
+    default: ''
+    required: false
+    description: could be inject token by env SONAR_TOKEN
+
 
   workspace:
     required: false
@@ -55,3 +64,5 @@ runs:
       uses: pmeig/github-actions/actions/java/sonar/setup/plugin@main
       with:
         workspace: ${{ inputs.workspace }}
+        host: ${{ inputs.host }}
+        token: ${{ inputs.token }}

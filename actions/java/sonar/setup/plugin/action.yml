@@ -3,7 +3,7 @@ description: insert plugin sonar
 
 inputs:
   host:
-    default: 'http://sonar.pmeig'
+    default: 'http://sonar:9000'
     required: false
     description: host of sonar
   token:
