@@ -43,6 +43,7 @@ runs:
               properties="$property $properties"
             fi
           done
+          rm sonar-project.properties
           echo "value=$properties" >> $GITHUB_OUTPUT
         fi
     - name: insert sonar build properties step 1
