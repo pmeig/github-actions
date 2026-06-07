@@ -43,9 +43,9 @@ runs:
           fi
           prepare='<execution><id>prepare-agent</id><goals><goal>prepare-agent</goal></goals></execution>'
           configuration='<configuration><excludes><exclude>**/*$WhenMappings.class</exclude><exclude>**/*$DefaultImpls.class</exclude><exclude>**/*Kt$*.class</exclude></excludes></configuration>'
-          reportExecution="<execution><id>report</id><phase>verify</phase><goals><goal>$report</goal></goals></execution>$configuration"
+          reportExecution="<execution><id>report</id><phase>verify</phase><goals><goal>$report</goal></goals></execution>"
           head='<groupId>org.jacoco</groupId><artifactId>jacoco-maven-plugin</artifactId><version>${sonar.jacoco.version}</version>'
-          jacoco="<plugin>$head<executions>$prepare$reportExecution</executions></plugin>"
+          jacoco="<plugin>$head<executions>$prepare$reportExecution</executions>$configuration</plugin>"
           echo "modules=$modules" >> $GITHUB_OUTPUT
           echo "jacoco=$jacoco" >> $GITHUB_OUTPUT
         fi
