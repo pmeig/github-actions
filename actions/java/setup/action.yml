@@ -31,7 +31,7 @@ runs:
       run: |
         if ! command -v mvn &> /dev/null
         then
-          sudo apt-get install -y maven
+          apt-get install -y maven
         fi
     - name: Set up JDK
       uses: actions/setup-java@v5
