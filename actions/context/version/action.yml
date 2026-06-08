@@ -61,7 +61,7 @@ runs:
         expression: project.version
     - name: get version in package
       id: node
-      if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && steps.pom.outputs.version == '' }}
+      if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && steps.pom.outputs.value == '' }}
       shell: bash
       working-directory: ${{ inputs.workspace }}
       run: |
@@ -76,7 +76,7 @@ runs:
       id: fragment
       shell: bash
       run: |
-        version='${{ steps.tag.outputs.version }}${{ steps.node.outputs.version }}${{ steps.pom.outputs.version }}${{ steps.version.outputs.version }}'
+        version='${{ steps.tag.outputs.version }}${{ steps.node.outputs.version }}${{ steps.pom.outputs.value }}${{ steps.version.outputs.version }}'
         if [ -n "$version" ]
         then
           version=${version/-/@}
