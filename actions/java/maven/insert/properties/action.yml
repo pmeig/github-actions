@@ -43,6 +43,6 @@ runs:
         done
         if [ "$isNewProperty" = 'true' ]
         then
-          properties="${properties//*/\*}${tag/</<\\/}"
+          properties="$properties${tag/</<\\/}"
           sed -i -E "0,/$anchor/s/$anchor/$properties$anchor/" pom.xml
         fi
