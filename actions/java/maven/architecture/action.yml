@@ -78,8 +78,8 @@ runs:
         for module in $(echo '${{ steps.modules.outputs.value }}' | jq -rc '.[]' )
         do
           artifactId=$(echo "$module" | jq -rc '.artifactId')
-          dependencies=$(echo '${{ steps.dependencies.outputs.value }}' | jq -rc --arg key "$artifactid" '.[$key]')
-          depends=$(echo '${{ steps.dependencies.outputs.depends }}' | jq -rc --arg key "$artifactid" '.[$key]')
+          dependencies=$(echo '${{ steps.dependencies.outputs.value }}' | jq -rc --arg key "$artifactId" '.[$key]')
+          depends=$(echo '${{ steps.dependencies.outputs.depends }}' | jq -rc --arg key "$artifactId" '.[$key]')
         
           arch=$(jq -rc --argjson metadata "$module" --argjson dependencies "$dependencies"\
           --argjson depends "$depends" '{ "metadata": $metadata, "dependencies": $dependencies, "depends": $depends}')
