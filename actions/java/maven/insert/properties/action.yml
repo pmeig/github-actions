@@ -36,13 +36,13 @@ runs:
           if [ -z "$(grep -e $regex pom.xml)" ]
           then
             isNewProperty=true
-            properties="$properties<$name>$value<\/$name>"
+            properties="$properties<$name>$(echo "$value" | sed 's/[&/\*]/\\&/g; s/\./\\./g')<\/$name>"
           else
             mvn versions:set-property -Dproperty=$name -DnewVersion=$value -DgenerateBackupPoms=false -q
           fi
         done
         if [ "$isNewProperty" = 'true' ]
         then
-          properties="$properties${tag/</<\\/}"
-          sed -i -E "s/$anchor/$properties$anchor/" pom.xml
+          properties="${properties//*/\*}${tag/</<\\/}"
+          sed -i -E "0,/$anchor/s/$anchor/$properties$anchor/" pom.xml
         fi
