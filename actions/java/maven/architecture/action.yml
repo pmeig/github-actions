@@ -41,9 +41,9 @@ runs:
         
           module=$(echo '{}' | jq -rc --arg artifactId "$artifactId" --arg groupId "$groupId"\
           --arg version "$version" --arg path "$folder"\
-          '{ "artifactId": "$artifactId", "groupId": "$groupId", "version": "$version", "path": "$path" }')
-        
-          artifactIds=$(echo "$artifactIds" | jq -rc --arg key "$artifactId" --argjson module "$module" '. + { $(key): $module}')
+          '{ "artifactId": $artifactId, "groupId": $groupId, "version": $version, "path": $path }')
+      
+          artifactIds=$(echo "$artifactIds" | jq -rc --arg key "$artifactId" --argjson module "$module" '. + { ($key): $module}')
           cd $workspace
         done
         echo "value=$artifactIds" >> $GITHUB_OUTPUT
