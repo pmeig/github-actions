@@ -29,7 +29,7 @@ runs:
       run: |
         mvn dependency:tree -DoutputType=tgf -DappendOutput=true -DoutputFile=output.tgf -q
         workspace=$(pwd)
-        artifactId='{}'
+        artifactIds='{}'
         
         for tgf in $(find . -name output.tgf)
         do
@@ -39,14 +39,14 @@ runs:
           groupId=$(mvn help:evaluate -Dexpression=project.groupId -q -DforceStdout)
           version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
         
-          module=$(jq -rc --arg artifactId "$artifactId" --arg groupId "$groupId"\
+          module=$(echo '{}' | jq -rc --arg artifactId "$artifactId" --arg groupId "$groupId"\
           --arg version "$version" --arg path "$folder"\
-          '. + { "artifactId": "$artifactId", "groupId": "$groupId", "version": "$version", "path": "$path" }')
+          '{ "artifactId": "$artifactId", "groupId": "$groupId", "version": "$version", "path": "$path" }')
         
-          artifactId=$(echo "$artifactId" | jq -rc --arg key "$artifactId" --argjson module "$module" '. + { $(key): $module}')
+          artifactIds=$(echo "$artifactIds" | jq -rc --arg key "$artifactId" --argjson module "$module" '. + { $(key): $module}')
           cd $workspace
         done
-        echo "value=$artifactId" >> $GITHUB_OUTPUT
+        echo "value=$artifactIds" >> $GITHUB_OUTPUT
     - name: extract dependencies between module
       id: dependencies
       shell: bash
@@ -57,10 +57,10 @@ runs:
         
         for module in $(echo '${{ steps.modules.outputs.value }}' | jq -rc '. | values | .[]')
         do
-          fdg="$(echo $module | jq -rc '.path')/output.fdg"
+          tgf="$(echo $module | jq -rc '.path')/output.tgf"
           artifactid=$(echo $module | jq -rc '.artifactId')
           dependencies=$(echo "$dependencies" | jq -rc --arg key "$artifactId" '. + { ($key): [] }')
-          for dependency in $(cat "$fdg" | cut -d' ' -f | grep -e '^${{  steps.groupId.outputs.value }}' | cut -d':' -f2)
+          for dependency in $(cat "$tgf" | cut -d' ' -f | grep -e '^${{  steps.groupId.outputs.value }}' | cut -d':' -f2)
           do
             moduleDependency=$(echo '${{ steps.modules.outputs.value }}' | jq -rc --arg name "$dependency" '.[$name]')
             dependencies=$(echo "$dependencies" | jq -rc --arg key "$artifactId" --argjson add "$moduleDependency" '.[$key] += [$add]')
