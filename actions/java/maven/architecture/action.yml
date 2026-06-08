@@ -81,7 +81,7 @@ runs:
           dependencies=$(echo '${{ steps.dependencies.outputs.value }}' | jq -rc --arg key "$artifactId" '.[$key]')
           depends=$(echo '${{ steps.dependencies.outputs.depends }}' | jq -rc --arg key "$artifactId" '.[$key]')
         
-          arch=$(jq -rc --argjson metadata "$module" --argjson dependencies "$dependencies"\
+          arch=$(jq -rcn --argjson metadata "$module" --argjson dependencies "$dependencies"\
           --argjson depends "$depends" '{ "metadata": $metadata, "dependencies": $dependencies, "depends": $depends}')
           architecture=$(echo "$architecture" | jq -rc --argjson value "$arch" --arg key "$artifactId" '. + { ($key): $value}')
         done
