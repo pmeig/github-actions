@@ -5,7 +5,7 @@ inputs:
   host:
     default: 'http://sonar:9000'
     required: false
-    description: host of sonar
+    description: host of sonar, or use SONAR_HOST
   token:
     default: ''
     required: false
@@ -17,6 +17,17 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: handle config
+      shell: bash
+      run: |
+        if [ -z "$SONAR_HOST" ]
+        then
+          echo 'SONAR_HOST=${{ inputs.host }}' >> $GITHUB_ENV
+        fi
+        if [ -z "$SONAR_TOKEN" ]
+        then
+          echo 'SONAR_TOKEN=${{ inputs.token }}' >> $GITHUB_ENV
+        fi
     - name: plugin sonar
       id: context
       shell: bash
@@ -65,7 +76,7 @@ runs:
       if: ${{ steps.context.outputs.sonar != '' }}
       with:
         workspace: ${{ inputs.workspace }}
-        properties: sonar.plugin.version=${{ steps.version.outputs.latest }} ${{ steps.properties.outputs.value }} sonar.host.url=${env.SONAR_HOST} sonar.token=${env.SONAR_TOKEN}
+        properties: sonar.plugin.version=${{ steps.version.outputs.latest }} ${{ steps.properties.outputs.value }} sonar.host.url=${{ env.SONAR_HOST }} sonar.token=${{ env.SONAR_TOKEN }}
     - name: insert plugin sonar
       uses: pmeig/github-actions/actions/java/maven/insert/plugin@main
       if: ${{ steps.context.outputs.sonar != '' }}
