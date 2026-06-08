@@ -33,7 +33,7 @@ runs:
         
         for tgf in $(find . -name output.tgf)
         do
-          folder=$(dirname($tgf))
+          folder=$(dirname $tgf)
           cd $folder
           artifactId=$(mvn help:evaluate -Dexpression=project.artifactId -q -DforceStdout)
           groupId=$(mvn help:evaluate -Dexpression=project.groupId -q -DforceStdout)
@@ -43,7 +43,7 @@ runs:
           --arg version "$version" --arg path "$folder"\
           '. + { "artifactId": "$artifactId", "groupId": "$groupId", "version": "$version", "path": "$path" }')
         
-          artifactId=$(echo "$artifactId" | jq -rc --arg key "$artifactId" --argjson module "$module" '. + { $(key): $module}'
+          artifactId=$(echo "$artifactId" | jq -rc --arg key "$artifactId" --argjson module "$module" '. + { $(key): $module}')
           cd $workspace
         done
         echo "value=$artifactId" >> $GITHUB_OUTPUT
