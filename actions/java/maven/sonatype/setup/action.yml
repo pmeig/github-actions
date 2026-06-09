@@ -40,7 +40,7 @@ runs:
         fi
         
         server='<server><id>central</id><username>${env.SONATYPE_USERNAME}</username>'
-        server="$serve<password>\${env.SONATYPE_PASSWORD}</password><server>
+        server="$serve<password>\${env.SONATYPE_PASSWORD}</password></server>"
         echo "value=$server" >> $GITHUB_OUTPUT
     - name: active profile gpg
       id: profile
@@ -56,7 +56,7 @@ runs:
         fi
         
         profile='<profile><id>gpg</id><properties><gpg.keyname>${env.GPG_KEY}</gpg.keyname>'
-        profile="$profile<gpg.passphrase>\${env.GPG_PASSPHRASE}</gpg.passphrase></properties>'
+        profile="$profile<gpg.passphrase>\${env.GPG_PASSPHRASE}</gpg.passphrase></properties>"
         echo "value=$profile</profile>" >> $GITHUB_OUTPUT
     - name: expose gpg secret key
       shell: bash
