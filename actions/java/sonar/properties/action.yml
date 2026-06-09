@@ -61,6 +61,7 @@ runs:
         if (( $(find . -name pom.xml | wc -l) > 1 ))
         then
           basedir='${maven.multiModuleProjectDirectory}'
+        fi
         echo "sonar.coverage.jacoco.xmlReportPaths=$basedir/sonar-report/target/site/jacoco-aggregate/jacoco.xml" >> sonar-project.properties
         libraries='${{ inputs.libraries }}'
         if [[ "$libraries" == *"lombok"* ]]
