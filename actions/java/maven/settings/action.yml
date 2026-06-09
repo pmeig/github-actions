@@ -70,4 +70,4 @@ runs:
         body='${{ inputs.body }}'
         echo "value=$settings" >> $GITHUB_OUTPUT
         schemaLocation="http://maven.apache.org/SETTINGS/1.1.0 http://maven.apache.org/xsd/settings-1.1.0.xsd"
-        echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?><settings xsi:schemaLocation=\"$schemaLocation\" xmlns=\"http://maven.apache.org/SETTINGS/1.1.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">$servers$profiles$body$actives</settings>" >> "$settings"
+        echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?><settings xsi:schemaLocation=\"$schemaLocation\" xmlns=\"http://maven.apache.org/SETTINGS/1.1.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">$servers$profiles$body$actives</settings>" > "$settings"
