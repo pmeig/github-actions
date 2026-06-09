@@ -57,7 +57,11 @@ runs:
         echo 'sonar.sourceEncoding=UTF-8' >> sonar-project.properties
         echo 'sonar.binaries=*/**' >> sonar-project.properties
         echo 'sonar.java.binaries=*/**' >> sonar-project.properties
-        echo 'sonar.coverage.jacoco.xmlReportPaths=./sonar-report/target/site/jacoco-aggregate/jacoco.xml' >> sonar-project.properties
+        basedir='${project.basedir}'
+        if (( $(find . -name pom.xml | wc -l) > 1 ))
+        then
+          basedir='${maven.multiModuleProjectDirectory}'
+        echo "sonar.coverage.jacoco.xmlReportPaths=$basedir/sonar-report/target/site/jacoco-aggregate/jacoco.xml" >> sonar-project.properties
         libraries='${{ inputs.libraries }}'
         if [[ "$libraries" == *"lombok"* ]]
         then
@@ -68,7 +72,8 @@ runs:
               echo "lombok=$libs" >> $GITHUB_OUTPUT
             fi
           done
-        else
+        else if [ '${{ inputs.plugin-lombok }}' == 'true' ]
+        then
           if [ -n "$(mvn dependencies:tree -Dincludes=lombok -q -DforceStdout=true -Pjacoco)" ]
           then
             if [ -n "$libraries" ]
