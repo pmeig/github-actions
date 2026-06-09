@@ -54,7 +54,7 @@ runs:
       id: path
       shell: bash
       run: |
-        filename='${{ inputs.filename }}''
+        filename='${{ inputs.filename }}'
         if [[ "$filename" != *".xml" ]]
         then
           filename="$filename.xml"
