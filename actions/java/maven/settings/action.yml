@@ -44,7 +44,7 @@ runs:
       if: ${{ inputs.actives != '' }}
       shell: bash
       run: |
-        profiles='<activeProfiles>'
+        profiles=''
         for profile in ${{ inputs.actives }}
         do
           profiles="$profiles<activeProfile>$profile</activeProfile>"

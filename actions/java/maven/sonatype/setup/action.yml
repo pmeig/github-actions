@@ -40,7 +40,7 @@ runs:
         fi
         
         server='<server><id>central</id><username>${env.SONATYPE_USERNAME}</username>'
-        server="$serve<password>\${env.SONATYPE_PASSWORD}</password></server>"
+        server="$server<password>\${env.SONATYPE_PASSWORD}</password></server>"
         echo "value=$server" >> $GITHUB_OUTPUT
     - name: active profile gpg
       id: profile
