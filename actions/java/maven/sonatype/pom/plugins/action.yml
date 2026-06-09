@@ -26,7 +26,7 @@ runs:
         if [ -z "$(grep 'maven-gpg-plugin' pom.xml)" ]
         then
           plugin='<groupId>org.apache.maven.plugins</groupId><artifactId>maven-gpg-plugin</artifactId><version>${maven-gpg-plugin.version}</version>'
-          plugin="$plugin<executions><execution><id>attach-javadocs</id><goals><goal>jar</goal></goals></execution></executions>"
+          plugin="$plugin<executions><execution><id>attach-javadocs</id><goals><goal>sign</goal></goals></execution></executions>"
           plugins="$plugins<plugin>$plugin</plugin>"
         fi
         if [ -z "$(grep 'central-publishing-maven-plugin' pom.xml)" ]
