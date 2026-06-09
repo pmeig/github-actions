@@ -32,7 +32,7 @@ runs:
         if [ -z "$(grep 'central-publishing-maven-plugin' pom.xml)" ]
         then
           plugin='<groupId>org.sonatype.central</groupId><artifactId>central-publishing-maven-plugin</artifactId><version>${central-publishing-maven-plugin.version}</version><extensions>true</extensions>'
-          plugin="$plugin<configuration><publishingServerId>central</publishingServerId><autoPublish>true</autoPublish><waitUntilPublished>true</waitUntilPublished></configuration>"
+          plugin="$plugin<configuration><publishingServerId>central</publishingServerId><autoPublish>true</autoPublish><waitForPublishCompletion>true</waitForPublishCompletion></configuration>"
           plugins="$plugins<plugin>$plugin</plugin>"
         fi
         echo "value=$plugins" >> $GITHUB_OUTPUT
