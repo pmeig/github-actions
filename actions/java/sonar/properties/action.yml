@@ -73,9 +73,8 @@ runs:
               echo "lombok=$libs" >> $GITHUB_OUTPUT
             fi
           done
-        else if [ '${{ inputs.plugin-lombok }}' == 'true' ]
-        then
-          if [ -n "$(mvn dependencies:tree -Dincludes=lombok -q -DforceStdout=true -Pjacoco)" ]
+        else
+          if [ '${{ inputs.plugin-lombok }}' == 'true' ] && [ -n "$(mvn dependencies:tree -Dincludes=lombok -q -DforceStdout=true -Pjacoco)" ]
           then
             if [ -n "$libraries" ]
             then
