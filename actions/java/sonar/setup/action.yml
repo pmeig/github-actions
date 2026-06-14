@@ -2,6 +2,9 @@ name: setup sonar
 description: prepare maven project to sonar
 
 inputs:
+  branch:
+    required: true
+    description: the name of branch
   modules:
     description: specific modules do you want apply sonar, if empty, all module is taken
     default: ''
@@ -59,6 +62,7 @@ runs:
         coverage-exclusions: ${{ inputs.coverage-exclusions }}
         quality: ${{ inputs.quality }}
         plugin-lombok: ${{ inputs.lombok }}
+        branch: ${{ inputs.branch }}
     - name: by plugin
       if: ${{ inputs.plugin == 'true' }}
       uses: pmeig/github-actions/actions/java/sonar/setup/plugin@main
