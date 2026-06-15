@@ -3,8 +3,9 @@ description: prepare maven project to sonar
 
 inputs:
   branch:
-    required: true
+    required: false
     description: the name of branch
+    default: ''
   modules:
     description: specific modules do you want apply sonar, if empty, all module is taken
     default: ''

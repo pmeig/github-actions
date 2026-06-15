@@ -2,8 +2,9 @@ name: sonar properties
 description: create sonar properties
 inputs:
   branch:
-    required: true
+    required: false
     description: the name of branch
+    default: ''
   sonar-plugin:
     description: enable properties for sonar plugin
     required: false
@@ -54,7 +55,10 @@ runs:
       working-directory: ${{ inputs.workspace }}
       run: |
         echo 'sonar.projectKey=${{ github.event.repository.name }}' > sonar-project.properties
-        echo 'sonar.branch.name=${{ inputs.branch }}' >> sonar-project.properties
+        if [ -n '${{ inputs.branch }}' ]
+        then
+          echo 'sonar.branch.name=${{ inputs.branch }}' >> sonar-project.properties
+        fi
         echo 'sonar.language=${{ steps.config.outputs.lang }}' >> sonar-project.properties
         echo 'sonar.java.coveragePlugin=${{ inputs.coverage }}' >> sonar-project.properties
         echo 'sonar.qualitygate.wait=${{ inputs.quality }}' >> sonar-project.properties
