@@ -39,15 +39,15 @@ runs:
         artifactory-user: ${{ inputs.artifactory-user }}
         artifactory-password: ${{ inputs.artifactory-password }}
         artifactory-url: ${{ inputs.artifactory-url }}
-    - name: find repository localization
-      uses: pmeig/github-actions/actions/java/maven/read@main
-      if: ${{ inputs.branch != '' }}
-      id: path
-      with:
-        expression: settings.localRepository
-    - name: apply cache
-      uses: actions/cache@v5
-      if: ${{ inputs.branch != '' }}
-      with:
-        key: mvn-${{ inputs.branch }}
-        path: ${{ steps.path.outputs.value }}
+#    - name: find repository localization
+#      uses: pmeig/github-actions/actions/java/maven/read@main
+#      if: ${{ inputs.branch != '' }}
+#      id: path
+#      with:
+#        expression: settings.localRepository
+#    - name: apply cache
+#      uses: actions/cache@v5
+#      if: ${{ inputs.branch != '' }}
+#      with:
+#        key: mvn-${{ inputs.branch }}
+#        path: ${{ steps.path.outputs.value }}
