@@ -29,5 +29,9 @@ runs:
           git fetch
           git stage ${{ inputs.stage }}
           git commit -m "${{ inputs.commit }}"
-          git push
+          if ! git push 2>&1
+          then
+            BRANCH=$(git branch --show-current)
+            git push --set-upstream origin "$BRANCH"
+          fi
         fi
