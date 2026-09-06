@@ -15,6 +15,10 @@ inputs:
   stage:
     required: true
     description: 'files staging separate by space'
+  force:
+    required: false
+    default: 'false'
+    description: 'force push, replacing the remote branch if it already exists'
 
 runs:
   using: composite
@@ -29,9 +33,12 @@ runs:
           git fetch
           git stage ${{ inputs.stage }}
           git commit -m "${{ inputs.commit }}"
-          if ! git push 2>&1
+          BRANCH=$(git branch --show-current)
+          if [ '${{ inputs.force }}' == 'true' ]
           then
-            BRANCH=$(git branch --show-current)
+            git push --force --set-upstream origin "$BRANCH"
+          elif ! git push 2>&1
+          then
             git push --set-upstream origin "$BRANCH"
           fi
         fi
