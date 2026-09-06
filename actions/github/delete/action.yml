@@ -1,0 +1,42 @@
+name: delete branch
+description: 'delete branch'
+inputs:
+  repo:
+    required: false
+    description: 'name of the repository'
+    default: ''
+  branch:
+    required: true
+    description: 'branch name to delete'
+  api_version:
+    required: false
+    description: "api version"
+    default: "2022-11-28"
+  accept:
+    required: false
+    default: "application/vnd.github+json"
+    description: "accept"
+
+runs:
+  using: composite
+  steps:
+    - name: config
+      id: config
+      shell: bash
+      run: |
+        repo='${{ inputs.repo }}'
+        if [ -z "$repo" ]
+        then
+          repo='${{ github.repository }}'
+        fi
+        echo "repo=$repo" >> $GITHUB_OUTPUT
+    - name: delete
+      shell: bash
+      run: |
+        curl -L \
+            -s \
+            -X DELETE \
+            -H "Accept: ${{ inputs.accept }}" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: ${{ inputs.api_version }}" \
+            https://api.github.com/repos/${{ steps.config.outputs.repo }}/git/refs/heads/${{ inputs.branch }}
