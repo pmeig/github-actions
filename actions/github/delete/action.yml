@@ -8,6 +8,10 @@ inputs:
   branch:
     required: true
     description: 'branch name to delete'
+  token:
+    required: false
+    description: github token could be delete branch
+    default: ''
   api_version:
     required: false
     description: "api version"
@@ -29,6 +33,18 @@ runs:
         then
           repo='${{ github.repository }}'
         fi
+        token='${{ inputs.token }}'
+        if [ -z "$token" ]
+        then
+          token=$GITHUB_TOKEN
+        fi
+        if [ -z "$token" ]
+        then
+          token='${{ github.token }}'
+        fi
+        
+        
+        echo "token=$token" >> $GITHUB_OUTPUT
         echo "repo=$repo" >> $GITHUB_OUTPUT
     - name: delete
       shell: bash
@@ -37,6 +53,6 @@ runs:
             -s \
             -X DELETE \
             -H "Accept: ${{ inputs.accept }}" \
-            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Authorization: Bearer ${{ steps.config.outputs.token }}" \
             -H "X-GitHub-Api-Version: ${{ inputs.api_version }}" \
             https://api.github.com/repos/${{ steps.config.outputs.repo }}/git/refs/heads/${{ inputs.branch }}
