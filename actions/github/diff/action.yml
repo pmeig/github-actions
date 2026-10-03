@@ -98,7 +98,10 @@ runs:
         for file in ${{ steps.excludes.outputs.value }}
         do
           parent=$(dirname $file)
-          while [ "$parent" != "$GITHUB_WORKSPACE" ] && [ ! -f "$parent/package.json" ] && [ ! -f "$parent/pom.xml" ]
+          # stop at the first module (npm, Maven or Gradle build root), or at the repository root
+          while [ "$parent" != "." ] && [ "$parent" != "/" ] && [ "$parent" != "$GITHUB_WORKSPACE" ] \
+            && [ ! -f "$parent/package.json" ] && [ ! -f "$parent/pom.xml" ] \
+            && [ ! -f "$parent/settings.gradle.kts" ] && [ ! -f "$parent/settings.gradle" ]
           do
             parent=$(dirname $parent)
           done
