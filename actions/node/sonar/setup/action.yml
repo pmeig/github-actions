@@ -1,65 +1,139 @@
 name: sonar configuration for node
-description: setup configuration for sonar
+description: >
+  generate sonar-project.properties of a node module (jest or vitest) when the module has none;
+  call it after the tests with coverage to point at the lcov.info they produced
 
 inputs:
+  workspace:
+    default: '.'
+    required: false
+    description: 'module folder, where sonar-project.properties is read or generated'
+  key:
+    default: ''
+    required: false
+    description: 'sonar.projectKey, default <repository> or <repository>-<module folder> when workspace is not the root'
   sources:
     default: 'src'
     description: folder sources to control
     required: false
   sources-test:
-    default: 'tests'
-    description: folder test sources to control
+    default: ''
+    description: 'folder test sources, default the first existing of test, tests, __tests__ (none: tests next to the sources)'
     required: false
-  workspace:
-    default: '.'
-    required: false
-    description: 'location for your sonar.properties'
-  manager:
-    default: 'npm'
-    description: use this manager npm/pnpm/yarn
+  test-inclusions:
+    default: '**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx'
+    description: test files (sonar.test.inclusions)
     required: false
   exclusion:
-    default: 'jest.config.ts,**/*.spec.ts,**/*.test.ts,**/*.js'
-    description: exclude for analyses in sonar
+    default: 'jest.config.ts,vitest.config.ts,**/*.spec.ts,**/*.test.ts,**/*.js'
+    description: exclude for analyses in sonar (sonar.exclusions)
+    required: false
+  coverage-exclusions:
+    default: ''
+    description: 'files without behavior to exclude from coverage, separated by comma (sonar.coverage.exclusions)'
+    required: false
+  lcov:
+    default: ''
+    description: 'lcov report relative to workspace, default the lcov.info found in the module (jest and vitest), else coverage/lcov.info'
     required: false
   tsconfig:
     description: path of tsconfig
     default: 'tsconfig.json'
+    required: false
+  manager:
+    default: 'npm'
+    description: deprecated, unused (the lcov report is found without the test runner)
     required: false
 
 outputs:
   config:
     value: ${{ inputs.workspace }}/sonar-project.properties
     description: config sonar
-
+  key:
+    value: ${{ steps.properties.outputs.key }}
+    description: sonar.projectKey used
 
 runs:
   using: composite
   steps:
-    - name: find lcov.info
-      shell: bash
-      id: lcov
-      working-directory: ${{ inputs.workspace }}
-      run: |
-        lcovFolder=$( ${{ inputs.manager }} jest --showConfig | jq -rc '.configs[] | .coverageDirectory')
-        echo "path=$lcovFolder/lcov.info" >> $GITHUB_OUTPUT
-    - name: create files sonar.properties
-      if: ${{ hashFiles('**/sonar-project.properties') == '' }}
+    - name: create sonar-project.properties
+      id: properties
       shell: bash
       working-directory: ${{ inputs.workspace }}
+      env:
+        KEY: ${{ inputs.key }}
+        WORKSPACE: ${{ inputs.workspace }}
+        SOURCES: ${{ inputs.sources }}
+        TESTS: ${{ inputs.sources-test }}
+        TEST_INCLUSIONS: ${{ inputs.test-inclusions }}
+        EXCLUSIONS: ${{ inputs.exclusion }}
+        COVERAGE_EXCLUSIONS: ${{ inputs.coverage-exclusions }}
+        LCOV: ${{ inputs.lcov }}
+        TSCONFIG: ${{ inputs.tsconfig }}
       run: |
-        repository='${{ github.repository }}'
-        if [[ "$repository" == *"/"* ]]
+        if [ -f sonar-project.properties ]
         then
-          repository=$(echo $repository | cut -d'/' -f2)
+          echo "::notice title=sonar::$WORKSPACE/sonar-project.properties exists, not generated"
+          echo "key=$(grep '^sonar.projectKey=' sonar-project.properties | cut -d'=' -f2-)" >> $GITHUB_OUTPUT
+          exit 0
         fi
-        echo "sonar.projectName=$repository" > sonar-project.properties
-        echo "sonar.projectVersion=$(jq -r '.version' package.json)" >> sonar-project.properties
-        echo "sonar.sources=${{ inputs.sources }} >> sonar-project.properties
-        echo 'sonar.sourceEncoding=UTF-8' >> sonar-project.properties
-        echo 'sonar.exclusions=${{ inputs.exclusion }}' >> sonar-project.properties
-        echo 'sonar.typescript.tsconfigPath=${{ inputs.tsconfig }}' >> sonar-project.properties
-        echo 'sonar.tests=${{ inputs.sources-test }}' >> sonar-project.properties
-        echo 'sonar.test.inclusions=**/*.spec.ts' >> sonar-project.properties
-        echo "sonar.javascript.lcov.reportPaths=$(${{ steps.lcov.outputs.path }}" >> sonar-project.properties
-        
+
+        key="$KEY"
+        if [ -z "$key" ]
+        then
+          key="${GITHUB_REPOSITORY#*/}"
+          module=$(basename "$(realpath .)")
+          if [ "$(realpath .)" != "$(realpath "$GITHUB_WORKSPACE")" ]
+          then
+            key="$key-$module"
+          fi
+        fi
+
+        tests="$TESTS"
+        if [ -z "$tests" ]
+        then
+          for folder in test tests __tests__
+          do
+            if [ -d "$folder" ]
+            then
+              tests="$folder"
+              break
+            fi
+          done
+        fi
+
+        lcov="$LCOV"
+        if [ -z "$lcov" ]
+        then
+          lcov=$(find . -name lcov.info -not -path '*/node_modules/*' | head -n 1)
+          lcov="${lcov#./}"
+        fi
+        lcov="${lcov:-coverage/lcov.info}"
+
+        {
+          echo "sonar.projectKey=$key"
+          echo "sonar.projectName=$key"
+          if [ -f package.json ]
+          then
+            echo "sonar.projectVersion=$(jq -r '.version' package.json)"
+          fi
+          echo 'sonar.sourceEncoding=UTF-8'
+          echo "sonar.sources=$SOURCES"
+          echo "sonar.exclusions=$EXCLUSIONS"
+          if [ -n "$tests" ]
+          then
+            echo "sonar.tests=$tests"
+          else
+            echo "sonar.tests=$SOURCES"
+          fi
+          echo "sonar.test.inclusions=$TEST_INCLUSIONS"
+          echo "sonar.typescript.tsconfigPaths=$TSCONFIG"
+          echo "sonar.javascript.lcov.reportPaths=$lcov"
+          if [ -n "$COVERAGE_EXCLUSIONS" ]
+          then
+            echo "sonar.coverage.exclusions=$COVERAGE_EXCLUSIONS"
+          fi
+        } > sonar-project.properties
+
+        echo "key=$key" >> $GITHUB_OUTPUT
+        cat sonar-project.properties
