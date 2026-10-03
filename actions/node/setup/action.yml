@@ -41,14 +41,15 @@ runs:
   steps:
     - uses: pmeig/github-actions/actions/node/manager@main
       id: manager
+    # pnpm must be installed before setup-node: `cache: pnpm` runs `pnpm store path` to find the cache directory
+    - name: Install pnpm
+      if: ${{ steps.manager.outputs.value == 'pnpm' }}
+      uses: pnpm/action-setup@v6
     - uses: actions/setup-node@v6
       id: setup-node-version
       with:
         node-version: ${{ inputs.version }}
         cache: ${{ steps.manager.outputs.value }}
-    - name: Install pnpm
-      if: ${{ steps.manager.outputs.value == 'pnpm' }}
-      uses: pnpm/action-setup@v6
     - name: Install pnpm
       if: ${{ steps.manager.outputs.value == 'yarn' }}
       shell: bash
