@@ -1,10 +1,19 @@
 name: node manager
 description: interpret manager use on project (npm/pnpm/yarn)
 
+inputs:
+  workspace:
+    default: '.'
+    required: false
+    description: folder of the node project (package.json, lockfile), relative to the repository root
+
 outputs:
   value:
     value: ${{ steps.yarn.outputs.value }}${{ steps.pnpm.outputs.value }}${{ steps.npm.outputs.value }}
     description: return
+  lockfile:
+    value: ${{ steps.yarn.outputs.lockfile }}${{ steps.pnpm.outputs.lockfile }}${{ steps.npm.outputs.lockfile }}
+    description: lockfile of the manager, relative to the repository root (cache key of setup-node)
 
 runs:
   using: composite
@@ -12,19 +21,23 @@ runs:
     - name: is pnpm
       id: pnpm
       shell: bash
+      working-directory: ${{ inputs.workspace }}
       run: |
-        if [ -f "pnpm-workspace.yaml" ]
+        if [ -f "pnpm-workspace.yaml" ] || [ -f "pnpm-lock.yaml" ]
         then
           echo value=pnpm >> $GITHUB_OUTPUT
+          echo lockfile=${{ inputs.workspace }}/pnpm-lock.yaml >> $GITHUB_OUTPUT
         fi
     - name: is yarn
       id: yarn
       shell: bash
+      working-directory: ${{ inputs.workspace }}
       if: ${{ steps.pnpm.outputs.value == '' }}
       run: |
         if [ -f "yarn.lock" ]
         then
           echo value=yarn >> $GITHUB_OUTPUT
+          echo lockfile=${{ inputs.workspace }}/yarn.lock >> $GITHUB_OUTPUT
         fi
     - name: is npm
       id: npm
@@ -32,3 +45,4 @@ runs:
       if: ${{ steps.pnpm.outputs.value == '' && steps.yarn.outputs.value == '' }}
       run: |
         echo value=npm >> $GITHUB_OUTPUT
+        echo lockfile=${{ inputs.workspace }}/package-lock.json >> $GITHUB_OUTPUT

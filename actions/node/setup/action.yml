@@ -34,18 +34,23 @@ inputs:
   workspace:
     default: '.'
     required: false
-    description: location of node_modules
+    description: folder of the node project (package.json, lockfile, node_modules), relative to the repository root
 
 runs:
   using: composite
   steps:
     - uses: pmeig/github-actions/actions/node/manager@main
       id: manager
+      with:
+        workspace: ${{ inputs.workspace }}
     # the package manager must be installed before setup-node: `cache: <manager>` runs it
     # (`pnpm store path`, `yarn cache dir`) to find the cache directory
     - name: Install pnpm
       if: ${{ steps.manager.outputs.value == 'pnpm' }}
       uses: pnpm/action-setup@v6
+      with:
+        # pnpm version from the packageManager field of the project in the workspace
+        package_json_file: ${{ inputs.workspace }}/package.json
     - name: Install yarn
       if: ${{ steps.manager.outputs.value == 'yarn' }}
       shell: bash
@@ -56,6 +61,7 @@ runs:
       with:
         node-version: ${{ inputs.version }}
         cache: ${{ steps.manager.outputs.value }}
+        cache-dependency-path: ${{ steps.manager.outputs.lockfile }}
     - name: remote
       shell: bash
       if: ${{ inputs.remote-token != '' }}
