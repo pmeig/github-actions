@@ -51,6 +51,9 @@ runs:
       with:
         # pnpm version from the packageManager field of the project in the workspace
         package_json_file: ${{ inputs.workspace }}/package.json
+        # standalone binary: the self-installer otherwise runs the npm bundled with the runner
+        # (externals/node24), which is broken on self-hosted runners ("Cannot find module '../lib/cli.js'")
+        standalone: true
     - name: Install yarn
       if: ${{ steps.manager.outputs.value == 'yarn' }}
       shell: bash
