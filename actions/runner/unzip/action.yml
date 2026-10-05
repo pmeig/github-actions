@@ -52,3 +52,13 @@ runs:
         SHIM
         chmod +x "$bin/unzip"
         echo "$bin" >> $GITHUB_PATH
+    # tools already cached by an earlier run that extracted without the permissions (python zipfile): give back the
+    # executable bit of their binaries, the setup actions reuse the cache instead of extracting again
+    - name: fix the permissions of the cached tools
+      shell: bash
+      run: |
+        for tool in "$RUNNER_TOOL_CACHE"/sonar-scanner-cli/*/*/bin "$RUNNER_TOOL_CACHE"/sonar-scanner-cli/*/*/jre/bin
+        do
+          [ -d "$tool" ] \&\& chmod -R u+x "$tool"
+        done
+        exit 0
