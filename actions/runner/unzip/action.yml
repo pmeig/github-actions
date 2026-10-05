@@ -1,0 +1,46 @@
+name: unzip shim
+description: >
+  put a working `unzip` first in the PATH of the following steps; /usr/local/bin/unzip of the
+  self-hosted runners is a tar wrapper that rejects the options of unzip (-q), which breaks
+  actions extracting zip archives (sonarqube-scan-action, setup-android...)
+
+runs:
+  using: composite
+  steps:
+    - name: install unzip shim
+      shell: bash
+      run: |
+        bin="$RUNNER_TEMP/unzip-shim"
+        mkdir -p "$bin"
+        cat > "$bin/unzip" <<'SHIM'
+        #!/usr/bin/env bash
+        # unzip [-o] [-q|-qq] <archive> [-d <directory>]: the options other than -d are ignored
+        archive=''
+        directory='.'
+        while [ $# -gt 0 ]
+        do
+          case "$1" in
+            -d) directory="$2"; shift ;;
+            -*) ;;
+            *) [ -z "$archive" ] && archive="$1" ;;
+          esac
+          shift
+        done
+        [ -n "$archive" ] || { echo "usage: unzip [-o] [-q] archive [-d directory]" >&2; exit 64; }
+        mkdir -p "$directory"
+        if command -v python3 > /dev/null
+        then
+          exec python3 -m zipfile -e "$archive" "$directory"
+        elif command -v bsdtar > /dev/null
+        then
+          exec bsdtar -xf "$archive" -C "$directory"
+        elif command -v jar > /dev/null
+        then
+          archive=$(realpath "$archive")
+          cd "$directory" && exec jar xf "$archive"
+        fi
+        echo "unzip: no python3, bsdtar or jar to extract $archive" >&2
+        exit 1
+        SHIM
+        chmod +x "$bin/unzip"
+        echo "$bin" >> $GITHUB_PATH
