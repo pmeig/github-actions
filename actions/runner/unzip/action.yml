@@ -59,6 +59,6 @@ runs:
       run: |
         for tool in "$RUNNER_TOOL_CACHE"/sonar-scanner-cli/*/*/bin "$RUNNER_TOOL_CACHE"/sonar-scanner-cli/*/*/jre/bin
         do
-          [ -d "$tool" ] \&\& chmod -R u+x "$tool"
+          [ -d "$tool" ] && chmod -R u+x "$tool"
         done
         exit 0
