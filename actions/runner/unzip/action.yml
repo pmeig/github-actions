@@ -1,6 +1,6 @@
 name: unzip shim
 description: >
-  put a working `unzip` first in the PATH of the following steps; /usr/local/bin/unzip of the
+  put a working `unzip` (keeping the file permissions) first in the PATH of the following steps; /usr/local/bin/unzip of the
   self-hosted runners is a tar wrapper that rejects the options of unzip (-q), which breaks
   actions extracting zip archives (sonarqube-scan-action, setup-android...)
 
@@ -28,12 +28,20 @@ runs:
         done
         [ -n "$archive" ] || { echo "usage: unzip [-o] [-q] archive [-d directory]" >&2; exit 64; }
         mkdir -p "$directory"
-        if command -v python3 > /dev/null
-        then
-          exec python3 -m zipfile -e "$archive" "$directory"
-        elif command -v bsdtar > /dev/null
+        # bsdtar first: it keeps the permissions of the archive (sonar-scanner must stay executable)
+        if command -v bsdtar > /dev/null
         then
           exec bsdtar -xf "$archive" -C "$directory"
+        elif command -v python3 > /dev/null
+        then
+          # python's zipfile drops the permissions: put them back
+          exec python3 -c 'import sys, zipfile, os
+        z = zipfile.ZipFile(sys.argv[1])
+        for i in z.infolist():
+            p = z.extract(i, sys.argv[2])
+            m = i.external_attr >> 16
+            if m:
+                os.chmod(p, m)' "$archive" "$directory"
         elif command -v jar > /dev/null
         then
           archive=$(realpath "$archive")
