@@ -45,6 +45,13 @@ runs:
         workspace: ${{ inputs.workspace }}
     # the package manager must be installed before setup-node: `cache: <manager>` runs it
     # (`pnpm store path`, `yarn cache dir`) to find the cache directory
+    # the self-installer of pnpm/action-setup runs `npm`: the one bundled with some self-hosted runners
+    # (externals/node24) is broken ("Cannot find module '../lib/cli.js'"), so put a working node first in the PATH
+    - name: node for the pnpm installer
+      if: ${{ steps.manager.outputs.value == 'pnpm' }}
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.version }}
     - name: Install pnpm
       if: ${{ steps.manager.outputs.value == 'pnpm' }}
       uses: pnpm/action-setup@v6
