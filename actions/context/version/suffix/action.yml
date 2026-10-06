@@ -5,6 +5,10 @@ inputs:
   env:
     description: environment to construct version
     required: true
+  dispatch:
+    description: "'false' gives the suffix of the environment (-SNAPSHOT, -RC) on a manual run too, instead of -TRY / -FIX"
+    required: false
+    default: 'true'
 outputs:
   value:
     value: ${{ steps.before.outputs.value }}${{ steps.suffix.outputs.value }}
@@ -16,7 +20,7 @@ runs:
     - name: suffix environment
       id: suffix
       shell: bash
-      if: ${{ inputs.env != 'prod' && github.event_name != 'workflow_dispatch' }}
+      if: ${{ inputs.env != 'prod' && (github.event_name != 'workflow_dispatch' || inputs.dispatch == 'false') }}
       run: |
         suffix='-SNAPSHOT'
         if [ "${{ inputs.env }}" == 'prep' ]
@@ -28,7 +32,7 @@ runs:
     - name: before suffix
       shell: bash
       id: before
-      if: ${{ github.event_name == 'workflow_dispatch' }}
+      if: ${{ github.event_name == 'workflow_dispatch' && inputs.dispatch != 'false' }}
       run: |
         suffix='-TRY'
         if [  "${{ inputs.env }}" != 'dev' ]
