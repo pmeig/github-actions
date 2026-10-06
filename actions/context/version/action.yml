@@ -49,7 +49,7 @@ runs:
           echo "version=$tag" >> $GITHUB_OUTPUT
         fi
     - uses: actions/checkout@v6
-      if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && hashFiles('**/pom.xml') == '' && hashFiles('**/package.json') == '' }}
+      if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && hashFiles('**/pom.xml') == '' && hashFiles('**/package.json') == '' && hashFiles('**/gradle.properties') == '' }}
       name: checkout current project
     - name: get version in pom
       id: pom
@@ -59,9 +59,27 @@ runs:
         workspace: ${{ inputs.workspace }}
         module: ${{ inputs.module }}
         expression: project.version
+    # Gradle (Android): version= of gradle.properties first, else versionName / version of app/build.gradle.kts
+    - name: get version in gradle
+      id: gradle
+      if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && steps.pom.outputs.value == '' }}
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      run: |
+        version=''
+        if [ -f gradle.properties ]
+        then
+          # no match is not an error (bash -e -o pipefail)
+          version=$(grep -E '^\s*version\s*=' gradle.properties | head -1 | cut -d'=' -f2- | tr -d ' \r\t' || true)
+        fi
+        if [ -z "$version" ] && [ -f app/build.gradle.kts ]
+        then
+          version=$(sed -nE 's/^\s*(versionName|version)\s*=\s*"([^"]+)".*/\2/p' app/build.gradle.kts | head -1)
+        fi
+        echo "value=$version" >> $GITHUB_OUTPUT
     - name: get version in package
       id: node
-      if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && steps.pom.outputs.value == '' }}
+      if: ${{ steps.tag.outputs.version == '' && inputs.version == '' && steps.pom.outputs.value == '' && steps.gradle.outputs.value == '' }}
       shell: bash
       working-directory: ${{ inputs.workspace }}
       run: |
@@ -76,7 +94,7 @@ runs:
       id: fragment
       shell: bash
       run: |
-        version='${{ steps.tag.outputs.version }}${{ steps.node.outputs.version }}${{ steps.pom.outputs.value }}${{ steps.version.outputs.version }}'
+        version='${{ steps.tag.outputs.version }}${{ steps.node.outputs.version }}${{ steps.pom.outputs.value }}${{ steps.gradle.outputs.value }}${{ steps.version.outputs.version }}'
         if [ -n "$version" ]
         then
           version=${version/-/@}
