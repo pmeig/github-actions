@@ -52,6 +52,11 @@ runs:
       uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.version }}
+    # pnpm project: a working unzip first in the PATH of the following steps (runner/unzip: the unzip of the
+    # self-hosted runners is a tar wrapper without -q), so the jobs do not need their own unzip step
+    - name: unzip for the pnpm installer
+      if: ${{ steps.manager.outputs.value == 'pnpm' }}
+      uses: pmeig/github-actions/actions/runner/unzip@main
     - name: Install pnpm
       if: ${{ steps.manager.outputs.value == 'pnpm' }}
       uses: pnpm/action-setup@v6
