@@ -1,0 +1,46 @@
+name: setup maestro
+description: >
+  install the Maestro CLI (mobile end-to-end tests) and put it in the PATH; the archive is extracted with `jar`
+  (the unzip of the self-hosted runners is a tar wrapper), so a JDK (17+) must be set up before
+
+inputs:
+  version:
+    default: '2.11.0'
+    required: false
+    description: version of the Maestro CLI (release cli-<version> of mobile-dev-inc/maestro)
+
+outputs:
+  home:
+    value: ${{ steps.install.outputs.home }}
+    description: folder of the installed CLI (bin/maestro inside)
+
+runs:
+  using: composite
+  steps:
+    - name: install maestro
+      id: install
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        home="${RUNNER_TOOL_CACHE:-$HOME/.cache}/maestro/$VERSION"
+        if [ ! -x "$home/bin/maestro" ]
+        then
+          archive="$RUNNER_TEMP/maestro.zip"
+          curl -fsSL -o "$archive" "https://github.com/mobile-dev-inc/maestro/releases/download/cli-${VERSION}/maestro.zip"
+          extract="$RUNNER_TEMP/maestro-extract"
+          rm -rf "$extract" "$home"
+          mkdir -p "$extract" "$(dirname "$home")"
+          (cd "$extract" && jar xf "$archive")
+          # the archive holds a single folder "maestro" (bin/, lib/)
+          mv "$extract/maestro" "$home"
+          chmod +x "$home"/bin/*
+        fi
+        echo "$home/bin" >> $GITHUB_PATH
+        # no analytics, no notification asking for them (the runner has no one to answer)
+        {
+          echo "MAESTRO_CLI_NO_ANALYTICS=1"
+          echo "MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true"
+        } >> $GITHUB_ENV
+        echo "home=$home" >> $GITHUB_OUTPUT
+        MAESTRO_CLI_NO_ANALYTICS=1 "$home/bin/maestro" --version

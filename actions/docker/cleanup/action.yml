@@ -1,0 +1,28 @@
+name: docker cleanup
+description: >
+  remove the containers and networks of a label (docker/postgres, android/emulator), the runner leaving the networks
+  first; use it with `if: always()`
+
+inputs:
+  label:
+    required: false
+    default: ''
+    description: Docker label of the resources (default pmeig.run=<run id>-<job>, the one of this job)
+
+runs:
+  using: composite
+  steps:
+    - name: remove containers and networks
+      shell: bash
+      env:
+        LABEL: ${{ inputs.label }}
+      run: |
+        label="${LABEL:-pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}}"
+        containers=$(docker ps -aq --filter "label=$label")
+        [ -n "$containers" ] && docker rm -f $containers > /dev/null
+        for network in $(docker network ls -q --filter "label=$label")
+        do
+          docker network disconnect -f "$network" "$(cat /etc/hostname)" > /dev/null 2>&1 || true
+          docker network rm "$network" > /dev/null 2>&1 || true
+        done
+        echo "removed: $(echo $containers | wc -w) container(s) of $label"

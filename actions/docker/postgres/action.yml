@@ -1,0 +1,70 @@
+name: postgres
+description: >
+  start a throwaway PostgreSQL in a Docker container next to the runner (Docker socket of the host), on a network the
+  runner joins; docker/cleanup removes it
+
+inputs:
+  image:
+    required: false
+    default: 'postgres:16'
+    description: Docker image
+  database:
+    required: false
+    default: 'test'
+    description: name of the database created
+  user:
+    required: false
+    default: 'test'
+    description: owner of the database
+  password:
+    required: false
+    default: 'test'
+    description: password of the user
+  network:
+    required: false
+    default: ''
+    description: Docker network shared with the runner (default pmeig-<run id>-<job>), created when missing
+
+outputs:
+  host:
+    value: ${{ steps.start.outputs.host }}
+    description: address of the database seen from the runner (port 5432)
+  network:
+    value: ${{ steps.start.outputs.network }}
+    description: Docker network of the database and the runner
+  label:
+    value: ${{ steps.start.outputs.label }}
+    description: Docker label of the container (for docker/cleanup)
+
+runs:
+  using: composite
+  steps:
+    - name: start postgres
+      id: start
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        DATABASE: ${{ inputs.database }}
+        DB_USER: ${{ inputs.user }}
+        DB_PASSWORD: ${{ inputs.password }}
+        NETWORK: ${{ inputs.network }}
+      run: |
+        network="${NETWORK:-pmeig-${GITHUB_RUN_ID}-${GITHUB_JOB}}"
+        label="pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}"
+        name="postgres-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+        docker network inspect "$network" > /dev/null 2>&1 || docker network create --label "$label" "$network" > /dev/null
+        docker network connect "$network" "$(cat /etc/hostname)" 2>/dev/null || true
+        docker rm -f "$name" > /dev/null 2>&1 || true
+        docker run -d --name "$name" --label "$label" --network "$network" \
+          -e POSTGRES_DB="$DATABASE" -e POSTGRES_USER="$DB_USER" -e POSTGRES_PASSWORD="$DB_PASSWORD" "$IMAGE" > /dev/null
+        for attempt in $(seq 1 60)
+        do
+          docker exec "$name" pg_isready -U "$DB_USER" -d "$DATABASE" > /dev/null 2>&1 && break
+          (( attempt == 60 )) && { docker logs --tail 30 "$name"; echo "::error::postgres did not start"; exit 1; }
+          sleep 1
+        done
+        host=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$network\").IPAddress}}" "$name")
+        echo "postgres ready: $host:5432/$DATABASE"
+        echo "host=$host" >> $GITHUB_OUTPUT
+        echo "network=$network" >> $GITHUB_OUTPUT
+        echo "label=$label" >> $GITHUB_OUTPUT
