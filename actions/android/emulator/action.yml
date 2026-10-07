@@ -57,6 +57,21 @@ inputs:
     required: false
     default: '-memory 2048 -no-audio -no-boot-anim'
     description: arguments added to the `emulator` command (EMULATOR_ADDITIONAL_ARGS of the image)
+  snapshot:
+    required: false
+    default: 'false'
+    description: >
+      'true' starts the emulators from a snapshot of an already booted one (a few seconds instead of a full Android
+      boot): the first run on a Docker host boots one emulator, saves its state (`default_boot`) and keeps it in the
+      local image pmeig-emulator-warm:<hash of image, device and emulator-args> (about 8 GB more than `image`), the
+      next ones reuse it, whatever the workflow or the repository: it belongs to the Docker host, not to the run.
+      Several jobs at once wait for the first one to build it (at most `snapshot-timeout`), then boot normally if it
+      is still missing. Another `image`, `device` or `emulator-args` builds another one next to it: remove the ones that
+      are not used any more with `docker image rm` (or `docker image prune -a` on the host).
+  snapshot-timeout:
+    required: false
+    default: '600'
+    description: seconds to wait to build the snapshot (or for another job that builds it) before booting Android normally
 
 outputs:
   count:
@@ -86,6 +101,8 @@ runs:
         TIMEOUT: ${{ inputs.timeout }}
         STAGGER: ${{ inputs.stagger }}
         EMULATOR_ARGS: ${{ inputs.emulator-args }}
+        SNAPSHOT: ${{ inputs.snapshot }}
+        SNAPSHOT_TIMEOUT: ${{ inputs.snapshot-timeout }}
         MEMORY_PER: ${{ inputs.memory-per-emulator }}
         CPUS_PER: ${{ inputs.cpus-per-emulator }}
       run: |
@@ -131,6 +148,95 @@ runs:
           docker stats --no-stream --format '{{.Name}}: cpu {{.CPUPerc}}, memory {{.MemUsage}}' $(docker ps -q --filter "label=$label") 2>&1 || true
           echo "::endgroup::"
         }
+
+        # Android booted, asked to adb INSIDE the container (the snapshot is taken there, from the console of the emulator)
+        booted_in() {
+          [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" == 'true' ] \
+            && [ "$(timeout 10 docker exec "$1" adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n ')" == '1' ] \
+            && timeout 10 docker exec "$1" adb -s emulator-5554 shell pm path android > /dev/null 2>&1
+        }
+
+        # boots one emulator, saves its state as the quick boot snapshot and keeps the container as the image $1
+        build_warm_image() {
+          local tag=$1 name="warm-${GITHUB_RUN_ID}-${GITHUB_JOB}" deadline=$((SECONDS + SNAPSHOT_TIMEOUT)) clean="warm-clean-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+          docker rm -f "$name" "$clean" > /dev/null 2>&1 || true
+          docker run -d --name "$name" --label "$label" --device /dev/kvm \
+            -e EMULATOR_DEVICE="$DEVICE" -e EMULATOR_ADDITIONAL_ARGS="$EMULATOR_ARGS" \
+            -e WEB_VNC=false -e WEB_LOG=false -e APPIUM=false "$IMAGE" > /dev/null || return 1
+          until booted_in "$name"
+          do
+            (( SECONDS > deadline )) && { echo "::warning::the emulator of the snapshot did not boot in ${SNAPSHOT_TIMEOUT}s"; return 1; }
+            sleep 5
+          done
+          sleep 20 # the system settles before its state is kept
+          docker exec "$name" adb -s emulator-5554 emu avd snapshot save default_boot 2>&1 | tr -d '\r' | grep -qx 'OK' || return 1
+          docker stop -t 60 "$name" > /dev/null || return 1
+          # what the stopped container still holds would prevent the next start: the image removes the first line of /etc/passwd
+          # at every start (so root is lost after a commit), and X11 and emulator locks of the previous run
+          local passwd user entrypoint cmd changes=()
+          passwd=$(mktemp)
+          docker run --rm --entrypoint cat "$IMAGE" /etc/passwd > "$passwd" || return 1
+          # the cleaning container below runs as root with another entrypoint: the image keeps those of the original one
+          user=$(docker inspect -f '{{.Config.User}}' "$IMAGE")
+          entrypoint=$(docker inspect -f '{{json .Config.Entrypoint}}' "$IMAGE")
+          cmd=$(docker inspect -f '{{json .Config.Cmd}}' "$IMAGE")
+          [ -n "$user" ] && changes+=(--change "USER $user")
+          [ "$entrypoint" != 'null' ] && changes+=(--change "ENTRYPOINT $entrypoint")
+          [ "$cmd" != 'null' ] && changes+=(--change "CMD $cmd")
+          docker commit "$name" "$tag" > /dev/null || return 1
+          docker run --name "$clean" --user root --entrypoint sh "$tag" -c \
+            'rm -rf /tmp/.X0-lock /tmp/.X11-unix/* /tmp/android* /tmp/hostapd* /tmp/netsim.ini /tmp/adb.*.log /home/androidusr/emulator/*.lock' || return 1
+          docker cp "$passwd" "$clean:/etc/passwd" || return 1
+          docker commit "${changes[@]}" "$clean" "$tag" > /dev/null || return 1
+          rm -f "$passwd"
+        }
+
+        # image of the emulators started from a snapshot: built once per Docker host and per image/device/arguments
+        warm_image() {
+          local tag="pmeig-emulator-warm:$(printf '%s|%s|%s' "$IMAGE" "$DEVICE" "$EMULATOR_ARGS" | sha1sum | cut -c1-12)"
+          local lock="pmeig-warm-lock-${tag##*:}" deadline=$((SECONDS + SNAPSHOT_TIMEOUT)) locked=1 created
+          # the lock is a Docker network: creating it is atomic on the host shared by the runners, and its label makes
+          # android/emulator/stop (docker/cleanup) remove it with the job, even when the job is killed
+          while ! docker image inspect "$tag" > /dev/null 2>&1
+          do
+            if docker network create --label "$label" "$lock" > /dev/null 2>&1
+            then
+              locked=0
+              break
+            fi
+            created=$(docker network inspect -f '{{.Created}}' "$lock" 2>/dev/null | cut -d. -f1)
+            if [ -n "$created" ] && (( $(date +%s) - $(date -d "$created" +%s) > SNAPSHOT_TIMEOUT + 120 ))
+            then
+              echo "removing a stale lock of the snapshot ($lock)"
+              docker network rm "$lock" > /dev/null 2>&1 || true
+            fi
+            (( SECONDS > deadline )) && break
+            sleep 5
+          done
+          if (( locked == 0 ))
+          then
+            # another job may have built it between the check and the lock
+            if ! docker image inspect "$tag" > /dev/null 2>&1
+            then
+              echo "building the snapshot $tag (boots one emulator, once per Docker host)"
+              if ! build_warm_image "$tag"
+              then
+                docker image rm "$tag" > /dev/null 2>&1 || true
+              fi
+              docker rm -f "warm-${GITHUB_RUN_ID}-${GITHUB_JOB}" "warm-clean-${GITHUB_RUN_ID}-${GITHUB_JOB}" > /dev/null 2>&1 || true
+            fi
+            docker network rm "$lock" > /dev/null 2>&1 || true
+          fi
+          if ! docker image inspect "$tag" > /dev/null 2>&1
+          then
+            echo "::warning::the snapshot is not available: the emulators boot Android normally"
+            return 1
+          fi
+          IMAGE=$tag
+          EMULATOR_ARGS="$EMULATOR_ARGS -no-snapshot-save"
+          echo "emulators started from the snapshot $tag"
+        }
+        [ "$SNAPSHOT" == 'true' ] && { warm_image || true; }
 
         names=()
         for index in $(seq 1 "$COUNT")
