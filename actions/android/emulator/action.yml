@@ -173,9 +173,11 @@ runs:
           docker stop -t 60 "$name" > /dev/null || return 1
           # what the stopped container still holds would prevent the next start: the image removes the first line of /etc/passwd
           # at every start (so root is lost after a commit), and X11 and emulator locks of the previous run
-          local passwd user entrypoint cmd changes=()
-          passwd=$(mktemp)
-          docker run --rm --entrypoint cat "$IMAGE" /etc/passwd > "$passwd" || return 1
+          local root_line user entrypoint cmd changes=()
+          # the root line of the ORIGINAL image, whatever it is (found, not written here): the image starts with `sudo`
+          # (chown of /dev/kvm) and fails with "unknown user root" when the line is missing
+          root_line=$(docker run --rm --entrypoint sh "$IMAGE" -c 'grep -m1 "^root:" /etc/passwd') || return 1
+          [ -n "$root_line" ] || return 1
           # the cleaning container below runs as root with another entrypoint: the image keeps those of the original one
           user=$(docker inspect -f '{{.Config.User}}' "$IMAGE")
           entrypoint=$(docker inspect -f '{{json .Config.Entrypoint}}' "$IMAGE")
@@ -184,11 +186,20 @@ runs:
           [ "$entrypoint" != 'null' ] && changes+=(--change "ENTRYPOINT $entrypoint")
           [ "$cmd" != 'null' ] && changes+=(--change "CMD $cmd")
           docker commit "$name" "$tag" > /dev/null || return 1
-          docker run --name "$clean" --user root --entrypoint sh "$tag" -c \
-            'rm -rf /tmp/.X0-lock /tmp/.X11-unix/* /tmp/android* /tmp/hostapd* /tmp/netsim.ini /tmp/adb.*.log /home/androidusr/emulator/*.lock' || return 1
-          docker cp "$passwd" "$clean:/etc/passwd" || return 1
+          # root line put back from inside the container (the file is rewritten in place, not replaced)
+          # (user 0, not "root": the name is looked up in the very file that lacks it)
+          docker run --name "$clean" --user 0 --entrypoint sh -e ROOT_LINE="$root_line" "$tag" -c \
+            'grep -q "^root:" /etc/passwd || { { printf "%s\n" "$ROOT_LINE"; cat /etc/passwd; } > /tmp/passwd.new && cat /tmp/passwd.new > /etc/passwd; }
+             rm -rf /tmp/passwd.new /tmp/.X0-lock /tmp/.X11-unix/* /tmp/android* /tmp/hostapd* /tmp/netsim.ini /tmp/adb.*.log /home/androidusr/emulator/*.lock' || return 1
           docker commit "${changes[@]}" "$clean" "$tag" > /dev/null || return 1
-          rm -f "$passwd"
+          # an image that cannot start is not kept
+          warm_usable "$tag" || { echo "::warning::the snapshot $tag cannot run sudo (root user missing): not kept"; return 1; }
+        }
+
+        # an image of the snapshot is usable when it exists and its user can still run sudo (the image needs it at every start)
+        warm_usable() {
+          docker image inspect "$1" > /dev/null 2>&1 \
+            && docker run --rm --entrypoint sh "$1" -c 'sudo -n true' > /dev/null 2>&1
         }
 
         # image of the emulators started from a snapshot: built once per Docker host and per image/device/arguments
@@ -197,7 +208,7 @@ runs:
           local lock="pmeig-warm-lock-${tag##*:}" deadline=$((SECONDS + SNAPSHOT_TIMEOUT)) locked=1 created
           # the lock is a Docker network: creating it is atomic on the host shared by the runners, and its label makes
           # android/emulator/stop (docker/cleanup) remove it with the job, even when the job is killed
-          while ! docker image inspect "$tag" > /dev/null 2>&1
+          while ! warm_usable "$tag"
           do
             if docker network create --label "$label" "$lock" > /dev/null 2>&1
             then
@@ -216,8 +227,10 @@ runs:
           if (( locked == 0 ))
           then
             # another job may have built it between the check and the lock
-            if ! docker image inspect "$tag" > /dev/null 2>&1
+            if ! warm_usable "$tag"
             then
+              # a snapshot built by an earlier version of this action may exist but be broken: replaced
+              docker image rm -f "$tag" > /dev/null 2>&1 || true
               echo "building the snapshot $tag (boots one emulator, once per Docker host)"
               if ! build_warm_image "$tag"
               then
@@ -227,7 +240,7 @@ runs:
             fi
             docker network rm "$lock" > /dev/null 2>&1 || true
           fi
-          if ! docker image inspect "$tag" > /dev/null 2>&1
+          if ! warm_usable "$tag"
           then
             echo "::warning::the snapshot is not available: the emulators boot Android normally"
             return 1
