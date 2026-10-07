@@ -17,7 +17,7 @@ runs:
       env:
         LABEL: ${{ inputs.label }}
       run: |
-        label="${LABEL:-pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}}"
+        label="${LABEL:-pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}}"
         containers=$(docker ps -aq --filter "label=$label")
         [ -n "$containers" ] && docker rm -f $containers > /dev/null
         for network in $(docker network ls -q --filter "label=$label")

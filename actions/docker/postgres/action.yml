@@ -49,9 +49,9 @@ runs:
         DB_PASSWORD: ${{ inputs.password }}
         NETWORK: ${{ inputs.network }}
       run: |
-        network="${NETWORK:-pmeig-${GITHUB_RUN_ID}-${GITHUB_JOB}}"
-        label="pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}"
-        name="postgres-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+        network="${NETWORK:-pmeig-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}}"
+        label="pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}"
+        name="postgres-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}"
         docker network inspect "$network" > /dev/null 2>&1 || docker network create --label "$label" "$network" > /dev/null
         docker network connect "$network" "$(cat /etc/hostname)" 2>/dev/null || true
         docker rm -f "$name" > /dev/null 2>&1 || true

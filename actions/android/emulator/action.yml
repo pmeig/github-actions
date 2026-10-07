@@ -125,8 +125,8 @@ runs:
           COUNT=$fit
           echo "::warning::$wanted emulators wanted, $COUNT started: $available MB of memory (${MEMORY_PER} MB each) and $cpus CPU(s) (${CPUS_PER} each) available on the host"
         fi
-        network="${NETWORK:-pmeig-${GITHUB_RUN_ID}-${GITHUB_JOB}}"
-        label="pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}"
+        network="${NETWORK:-pmeig-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}}"
+        label="pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}"
         docker network inspect "$network" > /dev/null 2>&1 || docker network create --label "$label" "$network" > /dev/null
         # the runner is a container of the same host: it joins the network to reach the emulators
         docker network connect "$network" "$(cat /etc/hostname)" > /dev/null 2>&1 || true
@@ -158,7 +158,7 @@ runs:
 
         # boots one emulator, saves its state as the quick boot snapshot and keeps the container as the image $1
         build_warm_image() {
-          local tag=$1 name="warm-${GITHUB_RUN_ID}-${GITHUB_JOB}" deadline=$((SECONDS + SNAPSHOT_TIMEOUT)) clean="warm-clean-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+          local tag=$1 name="warm-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}" deadline=$((SECONDS + SNAPSHOT_TIMEOUT)) clean="warm-clean-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}"
           docker rm -f "$name" "$clean" > /dev/null 2>&1 || true
           docker run -d --name "$name" --label "$label" --device /dev/kvm \
             -e EMULATOR_DEVICE="$DEVICE" -e EMULATOR_ADDITIONAL_ARGS="$EMULATOR_ARGS" \
@@ -223,7 +223,7 @@ runs:
               then
                 docker image rm "$tag" > /dev/null 2>&1 || true
               fi
-              docker rm -f "warm-${GITHUB_RUN_ID}-${GITHUB_JOB}" "warm-clean-${GITHUB_RUN_ID}-${GITHUB_JOB}" > /dev/null 2>&1 || true
+              docker rm -f "warm-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}" "warm-clean-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}" > /dev/null 2>&1 || true
             fi
             docker network rm "$lock" > /dev/null 2>&1 || true
           fi
@@ -241,7 +241,7 @@ runs:
         names=()
         for index in $(seq 1 "$COUNT")
         do
-          name="emulator-${GITHUB_RUN_ID}-${GITHUB_JOB}-${index}"
+          name="emulator-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}-${index}"
           docker rm -f "$name" > /dev/null 2>&1 || true
           docker run -d --name "$name" --label "$label" --network "$network" --device /dev/kvm \
             -e EMULATOR_DEVICE="$DEVICE" -e EMULATOR_ADDITIONAL_ARGS="$EMULATOR_ARGS" \
