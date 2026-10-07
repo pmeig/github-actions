@@ -1,0 +1,138 @@
+name: android emulators
+description: >
+  start Android emulators in Docker containers (image budtmo/docker-android, free) next to the runner, through the
+  Docker socket of the host: the host must have KVM (/dev/kvm). The runner joins their network and reaches them with
+  `adb connect`; the APK is installed and the ports of the runner are reversed on each device (`adb reverse`: the app
+  calls http://localhost:<port> and reaches a server started on the runner). android/emulator/stop removes them.
+
+inputs:
+  count:
+    required: false
+    default: '1'
+    description: number of emulators started in parallel
+  image:
+    required: false
+    default: 'budtmo/docker-android:emulator_14.0'
+    description: Docker image of the emulator (adb on port 5555, `device_status` READY once booted)
+  device:
+    required: false
+    default: 'Samsung Galaxy S10'
+    description: device profile of the emulator (EMULATOR_DEVICE of the image)
+  network:
+    required: false
+    default: ''
+    description: Docker network shared with the runner (default pmeig-<run id>-<job>), created when missing
+  apk:
+    required: false
+    default: ''
+    description: APK installed on every emulator (none = nothing installed)
+  reverse-ports:
+    required: false
+    default: ''
+    description: ports of the runner reached by the devices at localhost:<port>, separated by space
+  disable-keyboard:
+    required: false
+    default: 'true'
+    description: "'true' disables the soft keyboards: they would hide the bottom of the screens"
+  timeout:
+    required: false
+    default: '600'
+    description: seconds to wait for every emulator to boot
+
+outputs:
+  devices:
+    value: ${{ steps.start.outputs.devices }}
+    description: adb serials of the emulators (<ip>:5555), separated by comma
+  network:
+    value: ${{ steps.start.outputs.network }}
+    description: Docker network of the emulators and the runner
+  label:
+    value: ${{ steps.start.outputs.label }}
+    description: Docker label of the containers started (for android/emulator/stop or docker/cleanup)
+
+runs:
+  using: composite
+  steps:
+    - name: start the emulators
+      id: start
+      shell: bash
+      env:
+        COUNT: ${{ inputs.count }}
+        IMAGE: ${{ inputs.image }}
+        DEVICE: ${{ inputs.device }}
+        NETWORK: ${{ inputs.network }}
+        TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        command -v adb > /dev/null || { echo "::error::adb not found: run android/setup (platform-tools) first"; exit 1; }
+        if ! docker run --rm --device /dev/kvm busybox true > /dev/null 2>&1
+        then
+          echo "::error::the Docker host has no /dev/kvm: an Android emulator needs hardware acceleration (enable KVM on the host of the runners)"
+          exit 1
+        fi
+        network="${NETWORK:-pmeig-${GITHUB_RUN_ID}-${GITHUB_JOB}}"
+        label="pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}"
+        docker network inspect "$network" > /dev/null 2>&1 || docker network create --label "$label" "$network" > /dev/null
+        # the runner is a container of the same host: it joins the network to reach the emulators
+        docker network connect "$network" "$(cat /etc/hostname)" 2>/dev/null || true
+        names=()
+        for index in $(seq 1 "$COUNT")
+        do
+          name="emulator-${GITHUB_RUN_ID}-${GITHUB_JOB}-${index}"
+          docker rm -f "$name" > /dev/null 2>&1 || true
+          docker run -d --name "$name" --label "$label" --network "$network" --device /dev/kvm \
+            -e EMULATOR_DEVICE="$DEVICE" -e WEB_VNC=false "$IMAGE" > /dev/null
+          names+=("$name")
+        done
+        devices=()
+        deadline=$((SECONDS + TIMEOUT))
+        for name in "${names[@]}"
+        do
+          until [ "$(docker exec "$name" cat device_status 2>/dev/null | tr -d '\r\n ')" == 'READY' ]
+          do
+            if (( SECONDS > deadline )) || [ "$(docker inspect -f '{{.State.Running}}' "$name")" != 'true' ]
+            then
+              docker logs --tail 50 "$name" || true
+              echo "::error::emulator $name did not boot"
+              exit 1
+            fi
+            sleep 5
+          done
+          ip=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$network\").IPAddress}}" "$name")
+          serial="$ip:5555"
+          adb connect "$serial" > /dev/null
+          adb -s "$serial" wait-for-device
+          until [ "$(adb -s "$serial" shell getprop sys.boot_completed | tr -d '\r')" == '1' ]
+          do
+            (( SECONDS > deadline )) && { echo "::error::$serial did not finish booting"; exit 1; }
+            sleep 2
+          done
+          echo "$name ready: $serial"
+          devices+=("$serial")
+        done
+        echo "devices=$(IFS=,; echo "${devices[*]}")" >> $GITHUB_OUTPUT
+        echo "network=$network" >> $GITHUB_OUTPUT
+        echo "label=$label" >> $GITHUB_OUTPUT
+    - name: prepare the devices
+      shell: bash
+      env:
+        DEVICES: ${{ steps.start.outputs.devices }}
+        APK: ${{ inputs.apk }}
+        PORTS: ${{ inputs.reverse-ports }}
+        KEYBOARD: ${{ inputs.disable-keyboard }}
+      run: |
+        for serial in ${DEVICES//,/ }
+        do
+          [ -n "$APK" ] && adb -s "$serial" install -r "$APK" > /dev/null
+          for port in $PORTS
+          do
+            adb -s "$serial" reverse "tcp:$port" "tcp:$port" > /dev/null
+          done
+          if [ "$KEYBOARD" == 'true' ]
+          then
+            for ime in $(adb -s "$serial" shell ime list -s | tr -d '\r')
+            do
+              adb -s "$serial" shell ime disable "$ime" > /dev/null
+            done
+          fi
+          echo "$serial prepared"
+        done

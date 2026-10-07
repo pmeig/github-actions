@@ -1,0 +1,95 @@
+name: select maestro flows
+description: >
+  select the flows of a Maestro suite impacted by a change, from a JSON manifest: a flow runs when one of the files
+  changed starts with one of its paths (its pages, the API it calls...), when its own file changed, or when a file of
+  `always` changed. Manifest:
+  { "always": ["<path prefix>"...],
+    "groups": { "<name>": ["<path prefix>"...] },
+    "flows": { "<flow file>": ["<group name or path prefix>"...] } }
+  (paths relative to the repository root)
+
+inputs:
+  manifest:
+    required: true
+    description: path of the JSON manifest
+  files:
+    required: false
+    default: ''
+    description: files changed, separated by space (output `files` of github/diff)
+  all:
+    required: false
+    default: 'false'
+    description: "'true' selects every flow of the manifest (manual run, nothing to compare)"
+  check:
+    required: false
+    default: ''
+    description: >
+      folder of the flows: fails when one of its .yaml files (config.yaml excepted) is missing from the manifest, so a
+      new flow cannot be forgotten by the CI
+
+outputs:
+  flows:
+    value: ${{ steps.select.outputs.flows }}
+    description: flow files selected, separated by space (empty = nothing to run)
+  count:
+    value: ${{ steps.select.outputs.count }}
+    description: number of flows selected
+
+runs:
+  using: composite
+  steps:
+    - name: select the impacted flows
+      id: select
+      shell: bash
+      env:
+        MANIFEST: ${{ inputs.manifest }}
+        FILES: ${{ inputs.files }}
+        ALL: ${{ inputs.all }}
+        CHECK: ${{ inputs.check }}
+      run: |
+        [ -f "$MANIFEST" ] || { echo "::error::manifest $MANIFEST not found"; exit 1; }
+        if [ -n "$CHECK" ]
+        then
+          missing=''
+          for flow in "${CHECK%/}"/*.yaml
+          do
+            [ "$(basename "$flow")" == 'config.yaml' ] && continue
+            jq -e --arg flow "$flow" '.flows | has($flow)' "$MANIFEST" > /dev/null || missing="$missing $flow"
+          done
+          [ -z "$missing" ] || { echo "::error::flows missing from $MANIFEST:$missing"; exit 1; }
+        fi
+        # true when a changed file starts with one of the prefixes given on stdin
+        touched() {
+          local prefix file
+          while read -r prefix
+          do
+            [ -n "$prefix" ] || continue
+            for file in $FILES
+            do
+              [[ "$file" == "$prefix"* ]] && return 0
+            done
+          done
+          return 1
+        }
+        flows=''
+        # process substitution, not a pipe: touched stops at the first match and jq would fail on SIGPIPE (pipefail)
+        if [ "$ALL" == 'true' ] || touched < <(jq -r '.always[]?' "$MANIFEST")
+        then
+          flows=$(jq -r '.flows | keys[]' "$MANIFEST")
+          echo "every flow: $([ "$ALL" == 'true' ] && echo 'requested' || echo 'a shared file changed')"
+        else
+          for flow in $(jq -r '.flows | keys[]' "$MANIFEST")
+          do
+            # its own file, then each entry: a group (its paths) or a path
+            if touched < <(echo "$flow"; jq -r --arg flow "$flow" \
+                 '.groups as $groups | .flows[$flow][] | if $groups[.] then $groups[.][] else . end' "$MANIFEST")
+            then
+              flows="$flows $flow"
+            fi
+          done
+        fi
+        flows=$(echo $flows)
+        count=$(echo $flows | wc -w)
+        echo "selected ($count): ${flows:-none}"
+        echo "flows=$flows" >> $GITHUB_OUTPUT
+        echo "count=$count" >> $GITHUB_OUTPUT

@@ -1,0 +1,63 @@
+name: maestro test
+description: >
+  run Maestro flows on the devices given, split evenly across them (`--shard-split`), with a JUnit report and the
+  screenshots / logs of the failures in the output folder (maestro/setup before)
+
+inputs:
+  flows:
+    required: true
+    description: flow files (or folders) to run, separated by space
+  devices:
+    required: true
+    description: ids of the devices (adb serials), separated by comma
+  env:
+    required: false
+    default: ''
+    description: variables given to the flows, one KEY=VALUE per line (`-e KEY=VALUE`)
+  output:
+    required: false
+    default: 'maestro-report'
+    description: folder of the report (report.xml) and of the debug output of the failures
+  working-directory:
+    required: false
+    default: '.'
+    description: folder the paths of the flows are relative to
+
+outputs:
+  report:
+    value: ${{ steps.test.outputs.report }}
+    description: path of the JUnit report
+
+runs:
+  using: composite
+  steps:
+    - name: run the flows
+      id: test
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        FLOWS: ${{ inputs.flows }}
+        DEVICES: ${{ inputs.devices }}
+        VARIABLES: ${{ inputs.env }}
+        OUTPUT: ${{ inputs.output }}
+      run: |
+        [ -n "$FLOWS" ] || { echo "no flow to run"; exit 0; }
+        mkdir -p "$OUTPUT"
+        output=$(cd "$OUTPUT" && pwd)
+        args=()
+        while IFS= read -r variable
+        do
+          [ -n "$variable" ] && args+=(-e "$variable")
+        done <<< "$VARIABLES"
+        read -ra flows <<< "$FLOWS"
+        shards=$(echo "$DEVICES" | tr ',' '\n' | grep -c .)
+        # never more shards than flows (maestro refuses it)
+        (( shards > ${#flows[@]} )) && shards=${#flows[@]}
+        DEVICES=$(echo "$DEVICES" | tr ',' '\n' | grep . | head -n "$shards" | paste -sd, -)
+        echo "report=$output/report.xml" >> $GITHUB_OUTPUT
+        echo "${#flows[@]} flow(s) on $shards device(s): $DEVICES"
+        shard=()
+        (( shards > 1 )) && shard=(--shard-split "$shards")
+        maestro --device "$DEVICES" test "${flows[@]}" "${shard[@]}" "${args[@]}" \
+          --format junit --output "$output/report.xml" \
+          --test-output-dir "$output" --debug-output "$output/debug" --flatten-debug-output

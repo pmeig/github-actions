@@ -1,0 +1,30 @@
+name: stop android emulators
+description: >
+  disconnect and remove the emulators started by android/emulator, and their network (use it with `if: always()`)
+
+inputs:
+  devices:
+    required: false
+    default: ''
+    description: adb serials to disconnect, separated by comma (output devices of android/emulator)
+  label:
+    required: false
+    default: ''
+    description: Docker label of the containers (output label of android/emulator; default the one of this job)
+
+runs:
+  using: composite
+  steps:
+    - name: disconnect the devices
+      shell: bash
+      env:
+        DEVICES: ${{ inputs.devices }}
+      run: |
+        for serial in ${DEVICES//,/ }
+        do
+          adb disconnect "$serial" > /dev/null 2>&1 || true
+        done
+    - name: remove the containers
+      uses: pmeig/github-actions/actions/docker/cleanup@main
+      with:
+        label: ${{ inputs.label }}
