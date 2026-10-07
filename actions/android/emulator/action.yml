@@ -11,12 +11,20 @@ inputs:
     default: '1'
     description: >
       number of emulators wanted in parallel, at most: scaled down to what the host can carry (free memory divided by
-      `memory-per-emulator`, CPUs divided by `cpus-per-emulator`, at least 1) - five emulators on a host with 8 GB free
-      make it swap and the emulators die (adb `offline`)
+      the memory of an emulator, CPUs divided by `cpus-per-emulator`, at least 1) - five emulators on a host with 8 GB
+      free make it swap and the emulators die (adb `offline`)
   memory-per-emulator:
     required: false
-    default: '3072'
-    description: MB of host memory counted per emulator (the 2 GB of the guest plus the emulator itself)
+    default: 'auto'
+    description: >
+      MB of host memory counted per emulator. 'auto' shares the memory available on the host between the emulators
+      wanted (available / count); when that share is under `min-memory-per-emulator`, fewer emulators are started so
+      that each keeps that minimum. A number fixes it. The share is also set on each container as a soft limit
+      (`--memory-reservation`), so that an emulator that grows takes it from the others' unused memory first.
+  min-memory-per-emulator:
+    required: false
+    default: '4608'
+    description: MB under which an emulator is not started in 'auto' mode (measured 4.4 to 5.5 GB per container while it runs the flows)
   cpus-per-emulator:
     required: false
     default: '2'
@@ -104,6 +112,7 @@ runs:
         SNAPSHOT: ${{ inputs.snapshot }}
         SNAPSHOT_TIMEOUT: ${{ inputs.snapshot-timeout }}
         MEMORY_PER: ${{ inputs.memory-per-emulator }}
+        MEMORY_MIN: ${{ inputs.min-memory-per-emulator }}
         CPUS_PER: ${{ inputs.cpus-per-emulator }}
       run: |
         command -v adb > /dev/null || { echo "::error::adb not found: run android/setup (platform-tools) first"; exit 1; }
@@ -116,15 +125,22 @@ runs:
         cpus=$(nproc)
         available=$(free -m | awk '/^Mem:/ {print $7}')
         echo "host: $cpus cpu(s), $(free -m | awk '/^Mem:/ {print $2}') MB, $available MB available"
+        wanted=$COUNT
+        if [ "$MEMORY_PER" == 'auto' ]
+        then
+          # the memory available is shared between the emulators wanted, without going under the minimum of one emulator
+          MEMORY_PER=$(( available / (COUNT < 1 ? 1 : COUNT) ))
+          (( MEMORY_PER < MEMORY_MIN )) && MEMORY_PER=$MEMORY_MIN
+        fi
         fit=$(( available / MEMORY_PER ))
         (( cpus / CPUS_PER < fit )) && fit=$(( cpus / CPUS_PER ))
         (( fit < 1 )) && fit=1
-        wanted=$COUNT
         if (( COUNT > fit ))
         then
           COUNT=$fit
           echo "::warning::$wanted emulators wanted, $COUNT started: $available MB of memory (${MEMORY_PER} MB each) and $cpus CPU(s) (${CPUS_PER} each) available on the host"
         fi
+        echo "emulators: $COUNT of $wanted wanted, ${MEMORY_PER} MB of memory each"
         network="${NETWORK:-pmeig-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}}"
         label="pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}"
         docker network inspect "$network" > /dev/null 2>&1 || docker network create --label "$label" "$network" > /dev/null
@@ -256,7 +272,7 @@ runs:
         do
           name="emulator-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}-${index}"
           docker rm -f "$name" > /dev/null 2>&1 || true
-          docker run -d --name "$name" --label "$label" --network "$network" --device /dev/kvm \
+          docker run -d --name "$name" --label "$label" --network "$network" --device /dev/kvm --memory-reservation "${MEMORY_PER}m" \
             -e EMULATOR_DEVICE="$DEVICE" -e EMULATOR_ADDITIONAL_ARGS="$EMULATOR_ARGS" \
             -e WEB_VNC=false -e WEB_LOG=false -e APPIUM=false "$IMAGE" > /dev/null
           names+=("$name")
