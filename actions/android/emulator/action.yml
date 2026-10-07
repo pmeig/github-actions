@@ -9,7 +9,18 @@ inputs:
   count:
     required: false
     default: '1'
-    description: number of emulators started in parallel
+    description: >
+      number of emulators wanted in parallel, at most: scaled down to what the host can carry (free memory divided by
+      `memory-per-emulator`, CPUs divided by `cpus-per-emulator`, at least 1) - five emulators on a host with 8 GB free
+      make it swap and the emulators die (adb `offline`)
+  memory-per-emulator:
+    required: false
+    default: '3072'
+    description: MB of host memory counted per emulator (the 2 GB of the guest plus the emulator itself)
+  cpus-per-emulator:
+    required: false
+    default: '2'
+    description: CPUs counted per emulator
   image:
     required: false
     default: 'budtmo/docker-android:emulator_14.0'
@@ -48,6 +59,9 @@ inputs:
     description: arguments added to the `emulator` command (EMULATOR_ADDITIONAL_ARGS of the image)
 
 outputs:
+  count:
+    value: ${{ steps.start.outputs.count }}
+    description: number of emulators started (the number wanted, scaled down to the capacity of the host)
   devices:
     value: ${{ steps.start.outputs.devices }}
     description: adb serials of the emulators (<ip>:5555), separated by comma
@@ -72,6 +86,8 @@ runs:
         TIMEOUT: ${{ inputs.timeout }}
         STAGGER: ${{ inputs.stagger }}
         EMULATOR_ARGS: ${{ inputs.emulator-args }}
+        MEMORY_PER: ${{ inputs.memory-per-emulator }}
+        CPUS_PER: ${{ inputs.cpus-per-emulator }}
       run: |
         command -v adb > /dev/null || { echo "::error::adb not found: run android/setup (platform-tools) first"; exit 1; }
         if ! docker run --rm --device /dev/kvm busybox true > /dev/null 2>&1
@@ -79,8 +95,19 @@ runs:
           echo "::error::the Docker host has no /dev/kvm: an Android emulator needs hardware acceleration (enable KVM on the host of the runners)"
           exit 1
         fi
-        echo "host: $(nproc) cpu(s), $(free -m | awk '/^Mem:/ {print $2" MB, "$7" MB available"}')"
-        (( $(nproc) < COUNT * 2 )) && echo "::warning::$(nproc) cpu(s) for $COUNT emulators: boot will be slow, lower the number of emulators if it times out"
+        # what the host can carry: an emulator that does not fit makes the host swap and every emulator dies
+        cpus=$(nproc)
+        available=$(free -m | awk '/^Mem:/ {print $7}')
+        echo "host: $cpus cpu(s), $(free -m | awk '/^Mem:/ {print $2}') MB, $available MB available"
+        fit=$(( available / MEMORY_PER ))
+        (( cpus / CPUS_PER < fit )) && fit=$(( cpus / CPUS_PER ))
+        (( fit < 1 )) && fit=1
+        wanted=$COUNT
+        if (( COUNT > fit ))
+        then
+          COUNT=$fit
+          echo "::warning::$wanted emulators wanted, $COUNT started: $available MB of memory (${MEMORY_PER} MB each) and $cpus CPU(s) (${CPUS_PER} each) available on the host"
+        fi
         network="${NETWORK:-pmeig-${GITHUB_RUN_ID}-${GITHUB_JOB}}"
         label="pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}"
         docker network inspect "$network" > /dev/null 2>&1 || docker network create --label "$label" "$network" > /dev/null
@@ -146,13 +173,14 @@ runs:
               ip=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$network\").IPAddress}}" "$name")
             fi
             [ -n "$ip" ] && { adb connect "$ip:5555" > /dev/null 2>&1; serial="$ip:5555"; }
-            (( SECONDS - last >= 60 )) && { last=$SECONDS; echo "$name: still booting ($(( deadline - SECONDS ))s left, image status: $(docker exec "$name" cat device_status 2>/dev/null | head -c 40))"; }
+            (( SECONDS - last >= 60 )) && { last=$SECONDS; echo "$name: still booting ($(( deadline - SECONDS ))s left, image status: $(docker exec "$name" cat device_status 2>/dev/null | head -c 40), adb: $(adb devices | awk -v s="$serial" '$1 == s {print $2}'), host available: $(free -m | awk '/^Mem:/ {print $7}') MB)"; }
             sleep 5
           done
           echo "$name ready: $serial"
           devices+=("$serial")
         done
         echo "devices=$(IFS=,; echo "${devices[*]}")" >> $GITHUB_OUTPUT
+        echo "count=$COUNT" >> $GITHUB_OUTPUT
         echo "network=$network" >> $GITHUB_OUTPUT
         echo "label=$label" >> $GITHUB_OUTPUT
     - name: prepare the devices
