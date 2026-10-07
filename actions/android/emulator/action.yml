@@ -36,8 +36,16 @@ inputs:
     description: "'true' disables the soft keyboards: they would hide the bottom of the screens"
   timeout:
     required: false
-    default: '600'
-    description: seconds to wait for every emulator to boot
+    default: '900'
+    description: seconds to wait for every emulator to boot (counted from the start of the last one)
+  stagger:
+    required: false
+    default: '15'
+    description: seconds between the start of two emulators (booting all of them at once starves the host of CPU and I/O)
+  emulator-args:
+    required: false
+    default: '-memory 2048 -no-audio -no-boot-anim'
+    description: arguments added to the `emulator` command (EMULATOR_ADDITIONAL_ARGS of the image)
 
 outputs:
   devices:
@@ -62,6 +70,8 @@ runs:
         DEVICE: ${{ inputs.device }}
         NETWORK: ${{ inputs.network }}
         TIMEOUT: ${{ inputs.timeout }}
+        STAGGER: ${{ inputs.stagger }}
+        EMULATOR_ARGS: ${{ inputs.emulator-args }}
       run: |
         command -v adb > /dev/null || { echo "::error::adb not found: run android/setup (platform-tools) first"; exit 1; }
         if ! docker run --rm --device /dev/kvm busybox true > /dev/null 2>&1
@@ -69,42 +79,75 @@ runs:
           echo "::error::the Docker host has no /dev/kvm: an Android emulator needs hardware acceleration (enable KVM on the host of the runners)"
           exit 1
         fi
+        echo "host: $(nproc) cpu(s), $(free -m | awk '/^Mem:/ {print $2" MB, "$7" MB available"}')"
+        (( $(nproc) < COUNT * 2 )) && echo "::warning::$(nproc) cpu(s) for $COUNT emulators: boot will be slow, lower the number of emulators if it times out"
         network="${NETWORK:-pmeig-${GITHUB_RUN_ID}-${GITHUB_JOB}}"
         label="pmeig.run=${GITHUB_RUN_ID}-${GITHUB_JOB}"
         docker network inspect "$network" > /dev/null 2>&1 || docker network create --label "$label" "$network" > /dev/null
         # the runner is a container of the same host: it joins the network to reach the emulators
-        docker network connect "$network" "$(cat /etc/hostname)" 2>/dev/null || true
+        docker network connect "$network" "$(cat /etc/hostname)" > /dev/null 2>&1 || true
+        docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}' "$(cat /etc/hostname)" | grep -qw "$network" \
+          || { echo "::error::the runner could not join the network $network: it cannot reach the emulators"; exit 1; }
+
+        # diagnostic of an emulator that does not come up: what the image says, its log, adb, the load of the host
+        diagnose() {
+          local name=$1 serial=$2
+          echo "::group::diagnostic of $name"
+          echo "device_status of the image: $(docker exec "$name" cat device_status 2>&1 | head -c 200)"
+          docker ps -a --filter "name=$name" --format 'container: {{.Status}}'
+          echo "--- adb (runner): $(adb devices | tr '\n' ' ')"
+          echo "--- boot_completed: $(timeout 10 adb -s "$serial" shell getprop sys.boot_completed 2>&1 | tr -d '\r')"
+          echo "--- docker logs (last 80 lines)"
+          docker logs --tail 80 "$name" 2>&1 || true
+          echo "--- host"
+          uptime
+          docker stats --no-stream --format '{{.Name}}: cpu {{.CPUPerc}}, memory {{.MemUsage}}' $(docker ps -q --filter "label=$label") 2>&1 || true
+          echo "::endgroup::"
+        }
+
         names=()
         for index in $(seq 1 "$COUNT")
         do
           name="emulator-${GITHUB_RUN_ID}-${GITHUB_JOB}-${index}"
           docker rm -f "$name" > /dev/null 2>&1 || true
           docker run -d --name "$name" --label "$label" --network "$network" --device /dev/kvm \
-            -e EMULATOR_DEVICE="$DEVICE" -e WEB_VNC=false "$IMAGE" > /dev/null
+            -e EMULATOR_DEVICE="$DEVICE" -e EMULATOR_ADDITIONAL_ARGS="$EMULATOR_ARGS" \
+            -e WEB_VNC=false -e WEB_LOG=false -e APPIUM=false "$IMAGE" > /dev/null
           names+=("$name")
+          (( index < COUNT )) && sleep "$STAGGER"
         done
+
+        # android is ready when it says so (adb), not when the image says so: its own check gives up after 5 minutes,
+        # which a loaded host can exceed while the emulator finishes booting
         devices=()
         deadline=$((SECONDS + TIMEOUT))
         for name in "${names[@]}"
         do
-          until [ "$(docker exec "$name" cat device_status 2>/dev/null | tr -d '\r\n ')" == 'READY' ]
+          ip=''
+          serial=''
+          last=$SECONDS
+          until [ -n "$serial" ] && [ "$(timeout 10 adb -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n ')" == '1' ] \
+            && timeout 10 adb -s "$serial" shell pm path android > /dev/null 2>&1
           do
-            if (( SECONDS > deadline )) || [ "$(docker inspect -f '{{.State.Running}}' "$name")" != 'true' ]
+            if [ "$(docker inspect -f '{{.State.Running}}' "$name")" != 'true' ]
             then
-              docker logs --tail 50 "$name" || true
-              echo "::error::emulator $name did not boot"
+              diagnose "$name" "${serial:-none}"
+              echo "::error::emulator $name stopped"
               exit 1
             fi
+            if (( SECONDS > deadline ))
+            then
+              diagnose "$name" "${serial:-none}"
+              echo "::error::emulator $name did not boot in ${TIMEOUT}s (see the diagnostic above)"
+              exit 1
+            fi
+            if [ -z "$ip" ]
+            then
+              ip=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$network\").IPAddress}}" "$name")
+            fi
+            [ -n "$ip" ] && { adb connect "$ip:5555" > /dev/null 2>&1; serial="$ip:5555"; }
+            (( SECONDS - last >= 60 )) && { last=$SECONDS; echo "$name: still booting ($(( deadline - SECONDS ))s left, image status: $(docker exec "$name" cat device_status 2>/dev/null | head -c 40))"; }
             sleep 5
-          done
-          ip=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$network\").IPAddress}}" "$name")
-          serial="$ip:5555"
-          adb connect "$serial" > /dev/null
-          adb -s "$serial" wait-for-device
-          until [ "$(adb -s "$serial" shell getprop sys.boot_completed | tr -d '\r')" == '1' ]
-          do
-            (( SECONDS > deadline )) && { echo "::error::$serial did not finish booting"; exit 1; }
-            sleep 2
           done
           echo "$name ready: $serial"
           devices+=("$serial")
