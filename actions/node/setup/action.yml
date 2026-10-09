@@ -71,11 +71,13 @@ runs:
       shell: bash
       run: |
         npm i -g yarn
+    # the cache of setup-node needs a lockfile ("Some specified paths were not resolved, unable to cache
+    # dependencies"): a project without one gets no cache instead of a failure
     - uses: actions/setup-node@v6
       id: setup-node-version
       with:
         node-version: ${{ inputs.version }}
-        cache: ${{ steps.manager.outputs.value }}
+        cache: ${{ steps.manager.outputs.lockfile != '' && steps.manager.outputs.value || '' }}
         cache-dependency-path: ${{ steps.manager.outputs.lockfile }}
     - name: remote
       shell: bash

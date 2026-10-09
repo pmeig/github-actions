@@ -13,7 +13,7 @@ outputs:
     description: return
   lockfile:
     value: ${{ steps.yarn.outputs.lockfile }}${{ steps.pnpm.outputs.lockfile }}${{ steps.npm.outputs.lockfile }}
-    description: lockfile of the manager, relative to the repository root (cache key of setup-node)
+    description: lockfile of the manager, relative to the repository root (cache key of setup-node); empty when the project has none
 
 runs:
   using: composite
@@ -26,7 +26,11 @@ runs:
         if [ -f "pnpm-workspace.yaml" ] || [ -f "pnpm-lock.yaml" ]
         then
           echo value=pnpm >> $GITHUB_OUTPUT
-          echo lockfile=${{ inputs.workspace }}/pnpm-lock.yaml >> $GITHUB_OUTPUT
+          # pnpm-workspace.yaml without pnpm-lock.yaml: no lockfile, setup-node then runs without cache
+          if [ -f "pnpm-lock.yaml" ]
+          then
+            echo lockfile=${{ inputs.workspace }}/pnpm-lock.yaml >> $GITHUB_OUTPUT
+          fi
         fi
     - name: is yarn
       id: yarn
@@ -42,7 +46,15 @@ runs:
     - name: is npm
       id: npm
       shell: bash
+      working-directory: ${{ inputs.workspace }}
       if: ${{ steps.pnpm.outputs.value == '' && steps.yarn.outputs.value == '' }}
       run: |
         echo value=npm >> $GITHUB_OUTPUT
-        echo lockfile=${{ inputs.workspace }}/package-lock.json >> $GITHUB_OUTPUT
+        # a project may keep its lockfile out of git (.gitignore): no lockfile, setup-node then runs without cache
+        if [ -f "package-lock.json" ]
+        then
+          echo lockfile=${{ inputs.workspace }}/package-lock.json >> $GITHUB_OUTPUT
+        elif [ -f "npm-shrinkwrap.json" ]
+        then
+          echo lockfile=${{ inputs.workspace }}/npm-shrinkwrap.json >> $GITHUB_OUTPUT
+        fi
