@@ -5,8 +5,14 @@ description: >
   `always` changed. Manifest:
   { "always": ["<path prefix>"...],
     "groups": { "<name>": ["<path prefix>"...] },
-    "flows": { "<flow file>": ["<group name or path prefix>"...] } }
-  (paths relative to the repository root)
+    "flows": { "<flow file>": ["<group name or path prefix>"...] },
+    "additive": ["<path prefix>"...] }
+  (paths relative to the repository root).
+  `additive` is optional: declaration files (test ids, strings, message dictionaries, types) where a change that only ADDS
+  lines, or a new file, cannot change what an existing flow does. Such a file is left out of the files changed when the
+  compare of the pull request on GitHub (base...head) says it has no deleted line; whatever uses the new lines is another
+  file that selects its own flows. A file the compare does not list, a file that also loses or changes a line, or any error
+  of the API keeps the file in the change (the safe side). Without `additive` in the manifest nothing is asked to GitHub.
 
 inputs:
   manifest:
@@ -26,6 +32,22 @@ inputs:
     description: >
       folder of the flows: fails when one of its .yaml files (config.yaml excepted) is missing from the manifest, so a
       new flow cannot be forgotten by the CI
+  base:
+    required: false
+    default: ${{ github.event.pull_request.base.sha }}
+    description: commit the pull request starts from, for `additive` (empty = no filtering, every file changed counts)
+  head:
+    required: false
+    default: ${{ github.event.pull_request.head.sha }}
+    description: last commit of the pull request, for `additive`
+  token:
+    required: false
+    default: ${{ github.token }}
+    description: token that reads the compare of the pull request, for `additive`
+  repository:
+    required: false
+    default: ${{ github.repository }}
+    description: owner/name of the repository, for `additive`
 
 outputs:
   flows:
@@ -46,6 +68,10 @@ runs:
         FILES: ${{ inputs.files }}
         ALL: ${{ inputs.all }}
         CHECK: ${{ inputs.check }}
+        BASE: ${{ inputs.base }}
+        HEAD: ${{ inputs.head }}
+        TOKEN: ${{ inputs.token }}
+        REPOSITORY: ${{ inputs.repository }}
       run: |
         [ -f "$MANIFEST" ] || { echo "::error::manifest $MANIFEST not found"; exit 1; }
         if [ -n "$CHECK" ]
@@ -57,6 +83,52 @@ runs:
             jq -e --arg flow "$flow" '.flows | has($flow)' "$MANIFEST" > /dev/null || missing="$missing $flow"
           done
           [ -z "$missing" ] || { echo "::error::flows missing from $MANIFEST:$missing"; exit 1; }
+        fi
+        # additive paths: the files of those paths that only gain lines (or are new) are not a change for the flows
+        additive=$(jq -r '.additive[]?' "$MANIFEST")
+        if [ -n "$additive" ] && [ "$ALL" != 'true' ] && [ -n "$BASE" ] && [ -n "$HEAD" ] && [ -n "$FILES" ]
+        then
+          stats=''
+          page=1
+          while :
+          do
+            chunk=$(curl -fsS -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPOSITORY/compare/$BASE...$HEAD?per_page=100&page=$page") \
+              || { echo "::warning::compare of $BASE...$HEAD failed: every file changed counts"; stats=''; break; }
+            # one line per file: name, status, added lines, deleted lines
+            stats="$stats"$'\n'"$(echo "$chunk" | jq -r '.files[]? | "\(.filename)\t\(.status)\t\(.additions)\t\(.deletions)"')"
+            [ "$(echo "$chunk" | jq '.files | length')" -lt 100 ] && break
+            page=$((page + 1))
+          done
+          kept=''
+          left=''
+          for file in $FILES
+          do
+            inert=false
+            for prefix in $additive
+            do
+              if [[ "$file" == "$prefix"* ]]
+              then
+                # exact name (not a prefix of another file): status, additions, deletions
+                line=$(FILE="$file" awk -F'\t' '$1 == ENVIRON["FILE"] { print $2, $3, $4; exit }' <<< "$stats")
+                read -r status added deleted <<< "$line"
+                if [[ "$status" == 'added' || "$status" == 'modified' ]] && [[ "$added" =~ ^[0-9]+$ && "$added" -gt 0 ]] \
+                   && [[ "$deleted" == '0' ]]
+                then
+                  inert=true
+                fi
+                break
+              fi
+            done
+            if [ "$inert" == 'true' ]
+            then
+              left="$left $file"
+            else
+              kept="$kept $file"
+            fi
+          done
+          [ -z "$left" ] || echo "left out, only additions:$left"
+          FILES=$(echo $kept)
         fi
         # true when a changed file starts with one of the prefixes given on stdin
         touched() {
