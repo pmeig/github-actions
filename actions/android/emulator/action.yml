@@ -76,6 +76,16 @@ inputs:
       Several jobs at once wait for the first one to build it (at most `snapshot-timeout`), then boot normally if it
       is still missing. Another `image`, `device` or `emulator-args` builds another one next to it: remove the ones that
       are not used any more with `docker image rm` (or `docker image prune -a` on the host).
+  gpu:
+    required: false
+    default: 'auto'
+    description: >
+      renders the screen of the emulators with the GPU of the Docker host instead of the CPU (`-gpu host`). Measured on a
+      WSL2 host (RTX 5070 Laptop, 2 CPUs per emulator, all started together, 2 to 4 emulators): janky frames while scrolling
+      85-99% with the CPU renderer against 8-17% with the GPU on every emulator, the same boot time, no more load on the host.
+      'auto' uses it when the host has /dev/dxg (WSL2 GPU) and Docker can give it to a container, otherwise the CPU renderer;
+      'true' requires it (error when not available); 'false' keeps the CPU renderer. It changes the arguments of the emulator,
+      so the snapshot (see `snapshot`) is built again once for it.
   snapshot-timeout:
     required: false
     default: '600'
@@ -110,6 +120,7 @@ runs:
         STAGGER: ${{ inputs.stagger }}
         EMULATOR_ARGS: ${{ inputs.emulator-args }}
         SNAPSHOT: ${{ inputs.snapshot }}
+        GPU: ${{ inputs.gpu }}
         SNAPSHOT_TIMEOUT: ${{ inputs.snapshot-timeout }}
         MEMORY_PER: ${{ inputs.memory-per-emulator }}
         MEMORY_MIN: ${{ inputs.min-memory-per-emulator }}
@@ -120,6 +131,23 @@ runs:
         then
           echo "::error::the Docker host has no /dev/kvm: an Android emulator needs hardware acceleration (enable KVM on the host of the runners)"
           exit 1
+        fi
+        # GPU of the host (WSL2: /dev/dxg + the libraries of the driver, rendering by Mesa d3d12), given to the containers
+        gpu_docker=()
+        if [ "$GPU" != 'false' ]
+        then
+          if docker run --rm --device /dev/dxg -v /usr/lib/wsl:/usr/lib/wsl:ro busybox true > /dev/null 2>&1
+          then
+            gpu_docker=(--device /dev/dxg -v /usr/lib/wsl:/usr/lib/wsl:ro -e LD_LIBRARY_PATH=/usr/lib/wsl/lib -e GALLIUM_DRIVER=d3d12 -e MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA)
+            EMULATOR_ARGS="$EMULATOR_ARGS -gpu host"
+            echo "emulators rendered by the GPU of the host"
+          elif [ "$GPU" == 'true' ]
+          then
+            echo "::error::gpu is 'true' but the Docker host has no /dev/dxg (GPU of WSL2) usable by a container"
+            exit 1
+          else
+            echo "no GPU usable by the containers: the emulators are rendered by the CPU"
+          fi
         fi
         # what the host can carry: an emulator that does not fit makes the host swap and every emulator dies
         cpus=$(nproc)
@@ -176,7 +204,7 @@ runs:
         build_warm_image() {
           local tag=$1 name="warm-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}" deadline=$((SECONDS + SNAPSHOT_TIMEOUT)) clean="warm-clean-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}"
           docker rm -f "$name" "$clean" > /dev/null 2>&1 || true
-          docker run -d --name "$name" --label "$label" --device /dev/kvm \
+          docker run -d --name "$name" --label "$label" --device /dev/kvm "${gpu_docker[@]}" \
             -e EMULATOR_DEVICE="$DEVICE" -e EMULATOR_ADDITIONAL_ARGS="$EMULATOR_ARGS" \
             -e WEB_VNC=false -e WEB_LOG=false -e APPIUM=false "$IMAGE" > /dev/null || return 1
           until booted_in "$name"
@@ -272,7 +300,7 @@ runs:
         do
           name="emulator-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}-${index}"
           docker rm -f "$name" > /dev/null 2>&1 || true
-          docker run -d --name "$name" --label "$label" --network "$network" --device /dev/kvm --memory-reservation "${MEMORY_PER}m" \
+          docker run -d --name "$name" --label "$label" --network "$network" --device /dev/kvm "${gpu_docker[@]}" --memory-reservation "${MEMORY_PER}m" \
             -e EMULATOR_DEVICE="$DEVICE" -e EMULATOR_ADDITIONAL_ARGS="$EMULATOR_ARGS" \
             -e WEB_VNC=false -e WEB_LOG=false -e APPIUM=false "$IMAGE" > /dev/null
           names+=("$name")
