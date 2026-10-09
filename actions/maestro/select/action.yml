@@ -6,13 +6,21 @@ description: >
   { "always": ["<path prefix>"...],
     "groups": { "<name>": ["<path prefix>"...] },
     "flows": { "<flow file>": ["<group name or path prefix>"...] },
-    "additive": ["<path prefix>"...] }
+    "additive": ["<path prefix>"...],
+    "lines": { "<group name>": { "<file>": [[<first line>, <last line>]...] } },
+    "shas": { "<file>": "<git blob sha the lines were measured on>" } }
   (paths relative to the repository root).
   `additive` is optional: declaration files (test ids, strings, message dictionaries, types) where a change that only ADDS
   lines, or a new file, cannot change what an existing flow does. Such a file is left out of the files changed when the
   compare of the pull request on GitHub (base...head) says it has no deleted line; whatever uses the new lines is another
-  file that selects its own flows. A file the compare does not list, a file that also loses or changes a line, or any error
-  of the API keeps the file in the change (the safe side). Without `additive` in the manifest nothing is asked to GitHub.
+  file that selects its own flows.
+  `lines` is optional: for a group named in `lines`, a file changed selects the flows of the group only when a line of the
+  change (the `patch` of the compare: added lines, and the place of the deleted ones) falls in one of the ranges measured for
+  that group, e.g. the lines of the code a route runs. The ranges are valid for the file as it was measured: `shas` gives its
+  blob sha, and when the file of the pull request has another one (the code changed after the measure) the whole file counts.
+  Everywhere the safe side wins: a file the compare does not list, a patch GitHub left out, a file that also loses or changes
+  a line (for `additive`), any error of the API, or a manifest without those keys keeps the previous behaviour (every file counts).
+  Nothing is asked to GitHub without `additive` or `lines` in the manifest.
 
 inputs:
   manifest:
@@ -35,19 +43,19 @@ inputs:
   base:
     required: false
     default: ${{ github.event.pull_request.base.sha }}
-    description: commit the pull request starts from, for `additive` (empty = no filtering, every file changed counts)
+    description: commit the pull request starts from, for `additive` and `lines` (empty = no filtering, every file changed counts)
   head:
     required: false
     default: ${{ github.event.pull_request.head.sha }}
-    description: last commit of the pull request, for `additive`
+    description: last commit of the pull request, for `additive` and `lines`
   token:
     required: false
     default: ${{ github.token }}
-    description: token that reads the compare of the pull request, for `additive`
+    description: token that reads the compare of the pull request, for `additive` and `lines`
   repository:
     required: false
     default: ${{ github.repository }}
-    description: owner/name of the repository, for `additive`
+    description: owner/name of the repository, for `additive` and `lines`
 
 outputs:
   flows:
@@ -84,22 +92,33 @@ runs:
           done
           [ -z "$missing" ] || { echo "::error::flows missing from $MANIFEST:$missing"; exit 1; }
         fi
-        # additive paths: the files of those paths that only gain lines (or are new) are not a change for the flows
+
+        # the compare of the pull request (GitHub, base...head): per file the status, the added and deleted lines, the blob sha at
+        # head and the patch. Asked only for `additive` or `lines`; any failure leaves `compare` empty: every file counts.
         additive=$(jq -r '.additive[]?' "$MANIFEST")
-        if [ -n "$additive" ] && [ "$ALL" != 'true' ] && [ -n "$BASE" ] && [ -n "$HEAD" ] && [ -n "$FILES" ]
+        has_lines=$(jq -r 'if (.lines // {}) | length > 0 then "yes" else "" end' "$MANIFEST")
+        work=$(mktemp -d)
+        compare=''
+        if { [ -n "$additive" ] || [ -n "$has_lines" ]; } && [ "$ALL" != 'true' ] && [ -n "$BASE" ] && [ -n "$HEAD" ] && [ -n "$FILES" ]
         then
-          stats=''
           page=1
+          compare=yes
+          : > "$work/stats"
           while :
           do
-            chunk=$(curl -fsS -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/$REPOSITORY/compare/$BASE...$HEAD?per_page=100&page=$page") \
-              || { echo "::warning::compare of $BASE...$HEAD failed: every file changed counts"; stats=''; break; }
-            # one line per file: name, status, added lines, deleted lines
-            stats="$stats"$'\n'"$(echo "$chunk" | jq -r '.files[]? | "\(.filename)\t\(.status)\t\(.additions)\t\(.deletions)"')"
-            [ "$(echo "$chunk" | jq '.files | length')" -lt 100 ] && break
+            curl -fsS -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPOSITORY/compare/$BASE...$HEAD?per_page=100&page=$page" > "$work/chunk-$page.json" \
+              || { echo "::warning::compare of $BASE...$HEAD failed: every file changed counts"; compare=''; break; }
+            # one line per file: name, status, added lines, deleted lines, blob sha
+            jq -r '.files[]? | "\(.filename)\t\(.status)\t\(.additions)\t\(.deletions)\t\(.sha)"' "$work/chunk-$page.json" >> "$work/stats"
+            [ "$(jq '.files | length' "$work/chunk-$page.json")" -lt 100 ] && break
             page=$((page + 1))
           done
+        fi
+
+        # additive paths: the files of those paths that only gain lines (or are new) are not a change for the flows
+        if [ -n "$compare" ] && [ -n "$additive" ]
+        then
           kept=''
           left=''
           for file in $FILES
@@ -110,7 +129,7 @@ runs:
               if [[ "$file" == "$prefix"* ]]
               then
                 # exact name (not a prefix of another file): status, additions, deletions
-                line=$(FILE="$file" awk -F'\t' '$1 == ENVIRON["FILE"] { print $2, $3, $4; exit }' <<< "$stats")
+                line=$(FILE="$file" awk -F'\t' '$1 == ENVIRON["FILE"] { print $2, $3, $4; exit }' "$work/stats")
                 read -r status added deleted <<< "$line"
                 if [[ "$status" == 'added' || "$status" == 'modified' ]] && [[ "$added" =~ ^[0-9]+$ && "$added" -gt 0 ]] \
                    && [[ "$deleted" == '0' ]]
@@ -130,6 +149,45 @@ runs:
           [ -z "$left" ] || echo "left out, only additions:$left"
           FILES=$(echo $kept)
         fi
+
+        # lines of the change in a file (new numbering): an added line, and for a deleted one the place where it was (the line
+        # before and the line after). From the patch of the compare; nothing printed = no patch (too big...), the whole file counts.
+        changed_lines() {
+          local file=$1
+          jq -r --arg f "$file" '[.files[]? | select(.filename == $f) | .patch // empty] | first // empty' "$work"/chunk-*.json 2>/dev/null \
+            | awk '
+                /^@@/ { match($0, /\+[0-9]+/); n = substr($0, RSTART + 1, RLENGTH - 1) + 0; any = 1; next }
+                /^\\/ { next }
+                /^\+/ { print n; n++; next }
+                /^-/  { print n - 1; print n; next }
+                /^ /  { n++ }
+              '
+        }
+
+        # a group of `lines` is touched when a changed file of it has a line of the change in a range of the group (or when the
+        # ranges cannot be trusted: no sha, another sha, no patch)
+        lines_touched() {
+          local group=$1 file recorded current changed
+          while read -r file
+          do
+            [[ " $FILES " == *" $file "* ]] || continue
+            recorded=$(jq -r --arg f "$file" '.shas[$f] // empty' "$MANIFEST")
+            current=$(FILE="$file" awk -F'\t' '$1 == ENVIRON["FILE"] { print $5; exit }' "$work/stats")
+            changed=$(changed_lines "$file")
+            if [ -z "$compare" ] || [ -z "$recorded" ] || [ "$recorded" != "$current" ] || [ -z "$changed" ]
+            then
+              return 0
+            fi
+            jq -r --arg g "$group" --arg f "$file" '.lines[$g][$f][]? | "\(.[0]) \(.[1])"' "$MANIFEST" > "$work/ranges"
+            echo "$changed" > "$work/changed"
+            # a line of the change inside a range
+            awk 'NR == FNR { first[++count] = $1; last[count] = $2; next }
+                 { for (i = 1; i <= count; i++) if ($1 >= first[i] && $1 <= last[i]) { found = 1; exit } }
+                 END { exit !found }' "$work/ranges" "$work/changed" && return 0
+          done < <(jq -r --arg g "$group" '.lines[$g] // {} | keys[]' "$MANIFEST")
+          return 1
+        }
+
         # true when a changed file starts with one of the prefixes given on stdin
         touched() {
           local prefix file
@@ -143,6 +201,18 @@ runs:
           done
           return 1
         }
+
+        # an entry of a flow is touched: a group of `lines` by its lines, any other group by its paths, a path by itself
+        entry_touched() {
+          local entry=$1
+          if [ "$(jq -r --arg g "$entry" 'if (.lines // {})[$g] then "lines" else "" end' "$MANIFEST")" == 'lines' ]
+          then
+            lines_touched "$entry"
+          else
+            touched < <(jq -r --arg e "$entry" '.groups as $groups | if $groups[$e] then $groups[$e][] else $e end' "$MANIFEST")
+          fi
+        }
+
         flows=''
         # process substitution, not a pipe: touched stops at the first match and jq would fail on SIGPIPE (pipefail)
         if [ "$ALL" == 'true' ] || touched < <(jq -r '.always[]?' "$MANIFEST")
@@ -152,14 +222,23 @@ runs:
         else
           for flow in $(jq -r '.flows | keys[]' "$MANIFEST")
           do
-            # its own file, then each entry: a group (its paths) or a path
-            if touched < <(echo "$flow"; jq -r --arg flow "$flow" \
-                 '.groups as $groups | .flows[$flow][] | if $groups[.] then $groups[.][] else . end' "$MANIFEST")
+            # its own file, then each entry
+            if touched < <(echo "$flow")
             then
               flows="$flows $flow"
+              continue
             fi
+            while read -r entry
+            do
+              if entry_touched "$entry"
+              then
+                flows="$flows $flow"
+                break
+              fi
+            done < <(jq -r --arg flow "$flow" '.flows[$flow][]' "$MANIFEST")
           done
         fi
+        rm -rf "$work"
         flows=$(echo $flows)
         count=$(echo $flows | wc -w)
         echo "selected ($count): ${flows:-none}"
