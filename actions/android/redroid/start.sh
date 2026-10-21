@@ -93,7 +93,7 @@ for ((index = 1; index <= COUNT; index++))
 do
   name="redroid-${suffix}-${index}"
   docker rm -f "$name" > /dev/null 2>&1 || true
-  if ! docker run -d --name "$name" --label "$label" --network "$network" --privileged \
+  if ! docker run -itd --name "$name" --label "$label" --network "$network" --privileged \
     --memory-reservation "${MEMORY_PER_DEVICE}m" \
     "$IMAGE" \
     "androidboot.redroid_width=$WIDTH" \
