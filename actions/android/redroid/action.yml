@@ -1,0 +1,125 @@
+name: redroid Android devices
+description: >
+  Start Redroid Android containers beside a Linux runner. The Docker host must support binderfs, ashmem or memfd, IPv6,
+  DMA-BUF heaps and 4 KB pages. The runner joins a per-job Docker network, connects to each device with ADB, installs the
+  APK, reverses runner ports and disables the soft keyboard. The devices output is compatible with maestro/test.
+
+inputs:
+  count:
+    required: false
+    default: '1'
+    description: Maximum number of Redroid devices; reduced to fit available host memory and CPUs
+  memory-per-device:
+    required: false
+    default: '5500'
+    description: Memory in MB counted per device and set as its Docker memory reservation
+  cpus-per-device:
+    required: false
+    default: '2'
+    description: CPUs counted per device when scaling the requested device count
+  tag:
+    required: false
+    default: '14.0.0-latest'
+    description: Redroid image tag; the image repository is fixed to redroid/redroid
+  width:
+    required: false
+    default: '1080'
+    description: Android display width in pixels
+  height:
+    required: false
+    default: '2280'
+    description: Android display height in pixels
+  dpi:
+    required: false
+    default: '420'
+    description: Android display density
+  network:
+    required: false
+    default: ''
+    description: Docker network shared with the runner; generated per run when empty
+  apk:
+    required: false
+    default: ''
+    description: APK installed on every device
+  reverse-ports:
+    required: false
+    default: ''
+    description: Runner ports reached by each device at localhost, separated by spaces
+  disable-keyboard:
+    required: false
+    default: 'true'
+    description: Disable soft keyboards so they do not cover the bottom of screens
+  timeout:
+    required: false
+    default: '900'
+    description: Seconds to wait for Android to boot
+  stagger:
+    required: false
+    default: '15'
+    description: Seconds between starting devices
+
+outputs:
+  count:
+    value: ${{ steps.start.outputs.count }}
+    description: Number of devices started after scaling to host capacity
+  devices:
+    value: ${{ steps.start.outputs.devices }}
+    description: ADB serials (<ip>:5555), separated by commas
+  network:
+    value: ${{ steps.start.outputs.network }}
+    description: Docker network shared by the runner and the Redroid containers
+  label:
+    value: ${{ steps.start.outputs.label }}
+    description: Docker label for the containers and network, for redroid/stop
+
+runs:
+  using: composite
+  steps:
+    - name: start Redroid devices
+      id: start
+      shell: bash
+      env:
+        COUNT: ${{ inputs.count }}
+        MEMORY_PER_DEVICE: ${{ inputs.memory-per-device }}
+        CPUS_PER_DEVICE: ${{ inputs.cpus-per-device }}
+        TAG: ${{ inputs.tag }}
+        WIDTH: ${{ inputs.width }}
+        HEIGHT: ${{ inputs.height }}
+        DPI: ${{ inputs.dpi }}
+        NETWORK: ${{ inputs.network }}
+        TIMEOUT: ${{ inputs.timeout }}
+        STAGGER: ${{ inputs.stagger }}
+      run: bash "$GITHUB_ACTION_PATH/start.sh"
+    - name: prepare Redroid devices
+      shell: bash
+      env:
+        DEVICES: ${{ steps.start.outputs.devices }}
+        APK: ${{ inputs.apk }}
+        PORTS: ${{ inputs.reverse-ports }}
+        KEYBOARD: ${{ inputs.disable-keyboard }}
+      run: |
+        IFS=, read -ra devices <<< "$DEVICES"
+        for serial in "${devices[@]}"
+        do
+          [ -n "$serial" ] || continue
+          if [ -n "$APK" ]
+          then
+            adb -s "$serial" install -r "$APK"
+          fi
+          read -r -a ports <<< "$PORTS"
+          for port in "${ports[@]}"
+          do
+            [[ "$port" =~ ^[0-9]+$ ]] || { echo "::error::invalid reverse port: $port"; exit 1; }
+            adb -s "$serial" reverse "tcp:$port" "tcp:$port"
+          done
+          if [ "$KEYBOARD" == 'true' ]
+          then
+            imes=$(adb -s "$serial" shell ime list -s | tr -d '\r')
+            [ -n "$imes" ] || { echo "::error::no input method found on $serial"; exit 1; }
+            while IFS= read -r ime
+            do
+              [ -n "$ime" ] && adb -s "$serial" shell ime disable "$ime"
+            done <<< "$imes"
+          fi
+          echo "$serial prepared"
+        done
