@@ -1,0 +1,30 @@
+name: stop Redroid devices
+description: Disconnect Redroid devices and remove their containers and Docker network
+
+inputs:
+  devices:
+    required: false
+    default: ''
+    description: ADB serials, separated by commas
+  label:
+    required: false
+    default: ''
+    description: Docker label from android/redroid, used to remove only this run's resources
+
+runs:
+  using: composite
+  steps:
+    - name: disconnect Redroid devices
+      shell: bash
+      env:
+        DEVICES: ${{ inputs.devices }}
+      run: |
+        IFS=, read -ra devices <<< "$DEVICES"
+        for serial in "${devices[@]}"
+        do
+          [ -n "$serial" ] && adb disconnect "$serial" > /dev/null 2>&1 || true
+        done
+    - name: remove Redroid containers and network
+      uses: pmeig/github-actions/actions/docker/cleanup@main
+      with:
+        label: ${{ inputs.label || format('pmeig.redroid.run={0}-{1}-{2}-{3}', github.run_id, github.run_attempt, github.job, runner.name) }}
