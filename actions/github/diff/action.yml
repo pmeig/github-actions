@@ -57,7 +57,24 @@ runs:
         compare=$(curl -L -H "Accept: application/vnd.github+json" \
         -H "Authorization: Bearer ${{ github.token }}" -H \
         "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/${{ github.repository }}/compare/$to...$from )
-        for name in $(echo "$compare" | jq -r '.files[].filename')
+        names=$(echo "$compare" | jq -r '.files[]?.filename')
+        # the compare API lists 300 files at most (alphabetical order, no pagination): the end of a bigger diff,
+        # often the last modules (server, web), is silently dropped. Then the diff is computed by git, from the
+        # merge base given by the API (same meaning as compare/$to...$from)
+        if [ "$(echo "$compare" | jq '.files | length')" -ge 300 ]
+        then
+          base=$(echo "$compare" | jq -r '.merge_base_commit.sha // empty')
+          if [ -n "$base" ] && git rev-parse --git-dir > /dev/null 2>&1 \
+            && git fetch --no-tags --depth=1 origin "$base" \
+            && base=$(git rev-parse FETCH_HEAD) \
+            && git fetch --no-tags --depth=1 origin "$from"
+          then
+            names=$(git diff --name-only "$base" FETCH_HEAD)
+          else
+            echo "::warning::compare lists 300 files (API limit) and git could not complete it: the list may be truncated"
+          fi
+        fi
+        for name in $names
         do
           files="$name $files"
         done
