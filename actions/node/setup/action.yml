@@ -77,8 +77,21 @@ runs:
       id: setup-node-version
       with:
         node-version: ${{ inputs.version }}
-        cache: ${{ steps.manager.outputs.lockfile != '' && steps.manager.outputs.value || '' }}
+        # pull request, pnpm: no cache saved by the PR (read below); other cases: cache of setup-node
+        cache: ${{ steps.manager.outputs.lockfile != '' && (github.event_name != 'pull_request' || steps.manager.outputs.value != 'pnpm') && steps.manager.outputs.value || '' }}
         cache-dependency-path: ${{ steps.manager.outputs.lockfile }}
+    # pull request: read the pnpm store saved by develop (same key as setup-node), never write it
+    - name: pnpm store of develop
+      if: ${{ github.event_name == 'pull_request' && steps.manager.outputs.value == 'pnpm' && steps.manager.outputs.lockfile != '' }}
+      shell: bash
+      run: echo "PNPM_STORE=$(pnpm store path --silent)" >> $GITHUB_ENV
+    - name: restore pnpm store
+      if: ${{ github.event_name == 'pull_request' && steps.manager.outputs.value == 'pnpm' && steps.manager.outputs.lockfile != '' }}
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ env.PNPM_STORE }}
+        key: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles(steps.manager.outputs.lockfile) }}
+        restore-keys: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-
     - name: remote
       shell: bash
       if: ${{ inputs.remote-token != '' }}
@@ -104,8 +117,18 @@ runs:
           echo //${{ inputs.artifactory-url }}/artifactory/node:_auth=${AUTH}
         } >> ~/.npmrc
 
+    # pull request: node_modules of develop read only (the key of the PR itself never exists, develop is the fallback);
+    # other events: read and save under the key of the branch
     - name: cache node_modules
+      if: ${{ github.event_name != 'pull_request' }}
       uses: actions/cache@v5
       with:
         key: ${{ steps.manager.outputs.value }}-${{ inputs.branch }}
+        path: ${{ inputs.workspace }}/node_modules
+    - name: restore node_modules of develop
+      if: ${{ github.event_name == 'pull_request' }}
+      uses: actions/cache/restore@v5
+      with:
+        key: ${{ steps.manager.outputs.value }}-${{ inputs.branch }}
+        restore-keys: ${{ steps.manager.outputs.value }}-develop
         path: ${{ inputs.workspace }}/node_modules
