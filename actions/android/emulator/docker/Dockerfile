@@ -29,7 +29,9 @@ for directory in ('emulator', '.android'):
     os.chown(target, 1300, 1301)
 PY
 
+# Android 16 fills the 550m data partition of budtmo (no room for the APK): 4 GB, sparse on the host
 ENV EMULATOR_ANDROID_VERSION=${ANDROID_VERSION} \
-    EMULATOR_API_LEVEL=${ANDROID_API}
+    EMULATOR_API_LEVEL=${ANDROID_API} \
+    EMULATOR_DATA_PARTITION=4096m
 
 USER 1300:1301
