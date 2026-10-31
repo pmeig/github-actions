@@ -7,7 +7,7 @@
 FROM budtmo/docker-android:emulator_14.0@sha256:1bffbbed5d530284dd355eb73e863411b4a761bc55a00fa1e49fe4a013b6b24a
 
 # API level of the system image (system-images;android-<API>;google_apis;x86_64) and the Android version it is known as
-ARG ANDROID_API=36.1
+ARG ANDROID_API=36
 ARG ANDROID_VERSION=16.0
 
 USER 0
