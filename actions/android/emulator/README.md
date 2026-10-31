@@ -8,10 +8,10 @@ Inputs and outputs: see `action.yml`.
 ```
 job (runner container) --docker socket--> host Docker --> emulator containers (adb :5555, same network as the runner)
                                               |
-                      image: budtmo/docker-android:emulator_14.0            (android-api 34, default)
-                         or  pmeig-emulator:android<api>-<hash Dockerfile>   (built from docker/Dockerfile)
+                      image: budtmo/docker-android:emulator_14.0   (android-api 34, default)
+                         or  android-emulator:api<api>            (built from docker/Dockerfile, shared with docker compose)
                                               |
-                      snapshot (optional): pmeig-emulator-warm:<hash of image, device, args>
+                      snapshot (optional): pmeig-emulator-warm:<hash of image id, device, args>
 ```
 
 ## Android version: `android-api`
@@ -19,18 +19,25 @@ job (runner container) --docker socket--> host Docker --> emulator containers (a
 | `android-api` | Android | Image |
 |---|---|---|
 | `34` (default) | 14 | `image` as it is |
-| `33`, `35` | 13, 15 | built from `docker/Dockerfile` |
-| `36`, `36.1` | 16 | built from `docker/Dockerfile` |
+| `33`, `35` | 13, 15 | `android-emulator:api<api>`, built from `docker/Dockerfile` |
+| `36`, `36.1` | 16 | `android-emulator:api<api>`, built from `docker/Dockerfile` |
 
-Above 34 the action builds the image once per Docker host and per API level (lock: a Docker network, parallel jobs wait,
-`image-timeout`), tagged `pmeig-emulator:android<api>-<hash of the Dockerfile>`. The Dockerfile (pinned base by digest)
-installs `system-images;android-<api>;google_apis;x86_64` and adds the version to the API table of budtmo's launcher.
-The snapshot hash includes the image tag: each API keeps its own snapshot. The output `api` returns the level used.
+Above 34 the image is built once per Docker host and per API level: a Docker network is the lock, parallel jobs wait
+(`image-timeout`) then reuse it. The log says `image <tag>: built` (once) or `image <tag>: reused`; likewise
+`snapshot <tag>: built|reused`. The image carries the label `dockerfile.hash` (hash of `docker/Dockerfile`): it is rebuilt
+only when the label differs. An image without label (built by hand with `docker compose build android-emulator` in
+the docker project of the host, which holds a **byte-identical copy** of the Dockerfile) is reused as it is: after a change
+of the Dockerfile, rebuild it by hand or remove it. Its Dockerfile pins the base by digest, installs
+`system-images;android-<api>;google_apis;x86_64`, adds the version to the API table of budtmo's launcher and gives the
+data partition 4 GB (550 MB is full on Android 16). Android 16 needs more memory than 2048 MB (the system server
+restarted): pass `emulator-args: '-memory 3072 -no-audio -no-boot-anim'`.
+The snapshot hash includes the id of the image: each API (and each rebuild) keeps its own snapshot.
 Adapted from https://github.com/Hashim-K/android-agent-lab (MIT).
 
 ```yaml
 - uses: pmeig/github-actions/actions/android/emulator@main
   with:
     android-api: '36.1'
+    emulator-args: '-memory 3072 -no-audio -no-boot-anim'
     snapshot: 'true'
 ```
