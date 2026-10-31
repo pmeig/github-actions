@@ -301,7 +301,6 @@ runs:
               else
                 docker image rm "$tag" > /dev/null 2>&1 || true
               fi
-              fi
               docker rm -f "warm-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}" "warm-clean-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}" > /dev/null 2>&1 || true
             fi
             docker network rm "$lock" > /dev/null 2>&1 || true
