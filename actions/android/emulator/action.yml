@@ -267,6 +267,7 @@ runs:
         # image of the emulators started from a snapshot: built once per Docker host and per image/device/arguments
         warm_image() {
           local tag="pmeig-emulator-warm:$(printf '%s|%s|%s' "$IMAGE" "$DEVICE" "$EMULATOR_ARGS" | sha1sum | cut -c1-12)"
+          local wbuilt=reused
           local lock="pmeig-warm-lock-${tag##*:}" deadline=$((SECONDS + SNAPSHOT_TIMEOUT)) locked=1 created
           # the lock is a Docker network: creating it is atomic on the host shared by the runners, and its label makes
           # android/emulator/stop (docker/cleanup) remove it with the job, even when the job is killed
@@ -294,9 +295,12 @@ runs:
               # a snapshot built by an earlier version of this action may exist but be broken: replaced
               docker image rm -f "$tag" > /dev/null 2>&1 || true
               echo "building the snapshot $tag (boots one emulator, once per Docker host)"
-              if ! build_warm_image "$tag"
+              if build_warm_image "$tag"
               then
+                wbuilt=built
+              else
                 docker image rm "$tag" > /dev/null 2>&1 || true
+              fi
               fi
               docker rm -f "warm-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}" "warm-clean-${GITHUB_RUN_ID}-${GITHUB_JOB}-${RUNNER_NAME}" > /dev/null 2>&1 || true
             fi
@@ -309,12 +313,12 @@ runs:
           fi
           IMAGE=$tag
           EMULATOR_ARGS="$EMULATOR_ARGS -no-snapshot-save"
-          echo "emulators started from the snapshot $tag"
+          echo "snapshot $tag: $wbuilt"
         }
         # Android above 14: image built from docker/Dockerfile (budtmo has no tag above 14), once per Docker host and per
         # API level; its tag is the hash of the Dockerfile + the API, so another Dockerfile or API builds another one
         build_api_image() {
-          local dir="$ACTION_PATH/docker" version tag lock deadline=$((SECONDS + IMAGE_TIMEOUT)) locked=1 created
+          local built=reused dir="$ACTION_PATH/docker" version tag lock deadline=$((SECONDS + IMAGE_TIMEOUT)) locked=1 created
           case "$ANDROID_API" in
             33) version=13.0 ;;
             35) version=15.0 ;;
@@ -346,11 +350,12 @@ runs:
               echo "building the image $tag (Android API $ANDROID_API, once per Docker host)"
               docker build --build-arg "ANDROID_API=$ANDROID_API" --build-arg "ANDROID_VERSION=$version" -t "$tag" "$dir" > /dev/null \
                 || { docker network rm "$lock" > /dev/null 2>&1; echo "::error::build of $tag failed"; return 1; }
+              built=built
             fi
             docker network rm "$lock" > /dev/null 2>&1 || true
           fi
           IMAGE=$tag
-          echo "emulators on Android API $ANDROID_API: image $IMAGE"
+          echo "image $tag: $built (Android API $ANDROID_API)"
         }
         [ "$ANDROID_API" != '34' ] && { build_api_image || exit 1; }
         [ "$SNAPSHOT" == 'true' ] && { warm_image || true; }
@@ -416,7 +421,23 @@ runs:
       run: |
         for serial in ${DEVICES//,/ }
         do
-          [ -n "$APK" ] && adb -s "$serial" install -r "$APK" > /dev/null
+          if [ -n "$APK" ]
+          then
+            # Android 16 may restart its system server once after the boot: the install is retried until the package service answers
+            installed=false
+            for attempt in 1 2 3 4 5 6
+            do
+              if adb -s "$serial" install -r "$APK" > "$RUNNER_TEMP/install.log" 2>&1
+              then
+                installed=true
+                break
+              fi
+              echo "install on $serial failed (attempt $attempt): $(tr -d '\r' < "$RUNNER_TEMP/install.log" | head -c 300)"
+              sleep 10
+              adb -s "$serial" wait-for-device
+            done
+            $installed || { echo "::error::the APK could not be installed on $serial"; exit 1; }
+          fi
           for port in $PORTS
           do
             adb -s "$serial" reverse "tcp:$port" "tcp:$port" > /dev/null
