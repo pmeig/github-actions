@@ -33,6 +33,18 @@ inputs:
     required: false
     default: 'budtmo/docker-android:emulator_14.0'
     description: Docker image of the emulator (adb on port 5555, `device_status` READY once booted)
+  android-api:
+    required: false
+    default: '34'
+    description: >
+      API level of the Android system image: '34' (Android 14, default) starts `image` as it is; above (33, 35, 36 or
+      36.1 = Android 16) an image is built once per Docker host from docker/Dockerfile (budtmo has no tag above 14) on
+      top of `image`, tagged pmeig-emulator:android<api>-<hash of the Dockerfile>. The snapshot (see `snapshot`) is
+      built once per API level, as its hash includes the image tag.
+  image-timeout:
+    required: false
+    default: '1200'
+    description: seconds to wait to build the image of `android-api` (or for another job that builds it)
   device:
     required: false
     default: 'Samsung Galaxy S10'
@@ -101,6 +113,9 @@ outputs:
   network:
     value: ${{ steps.start.outputs.network }}
     description: Docker network of the emulators and the runner
+  api:
+    value: ${{ inputs.android-api }}
+    description: Android API level of the emulators
   label:
     value: ${{ steps.start.outputs.label }}
     description: Docker label of the containers started (for android/emulator/stop or docker/cleanup)
@@ -125,6 +140,9 @@ runs:
         MEMORY_PER: ${{ inputs.memory-per-emulator }}
         MEMORY_MIN: ${{ inputs.min-memory-per-emulator }}
         CPUS_PER: ${{ inputs.cpus-per-emulator }}
+        ANDROID_API: ${{ inputs.android-api }}
+        IMAGE_TIMEOUT: ${{ inputs.image-timeout }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
         command -v adb > /dev/null || { echo "::error::adb not found: run android/setup (platform-tools) first"; exit 1; }
         if ! docker run --rm --device /dev/kvm busybox true > /dev/null 2>&1
@@ -293,6 +311,48 @@ runs:
           EMULATOR_ARGS="$EMULATOR_ARGS -no-snapshot-save"
           echo "emulators started from the snapshot $tag"
         }
+        # Android above 14: image built from docker/Dockerfile (budtmo has no tag above 14), once per Docker host and per
+        # API level; its tag is the hash of the Dockerfile + the API, so another Dockerfile or API builds another one
+        build_api_image() {
+          local dir="$ACTION_PATH/docker" version tag lock deadline=$((SECONDS + IMAGE_TIMEOUT)) locked=1 created
+          case "$ANDROID_API" in
+            33) version=13.0 ;;
+            35) version=15.0 ;;
+            36|36.*) version=16.0 ;;
+            *) echo "::error::android-api '$ANDROID_API' is not supported (34 or 33 and 35 to 36.1)"; return 1 ;;
+          esac
+          tag="pmeig-emulator:android${ANDROID_API}-$(cat "$dir/Dockerfile" | sha1sum | cut -c1-10)"
+          lock="pmeig-image-lock-${tag##*:}"
+          while ! docker image inspect "$tag" > /dev/null 2>&1
+          do
+            if docker network create --label "$label" "$lock" > /dev/null 2>&1
+            then
+              locked=0
+              break
+            fi
+            created=$(docker network inspect -f '{{.Created}}' "$lock" 2>/dev/null | cut -d. -f1)
+            if [ -n "$created" ] && (( $(date +%s) - $(date -d "$created" +%s) > IMAGE_TIMEOUT + 120 ))
+            then
+              echo "removing a stale lock of the image ($lock)"
+              docker network rm "$lock" > /dev/null 2>&1 || true
+            fi
+            (( SECONDS > deadline )) && { echo "::error::the image $tag was not built in ${IMAGE_TIMEOUT}s"; return 1; }
+            sleep 5
+          done
+          if (( locked == 0 ))
+          then
+            if ! docker image inspect "$tag" > /dev/null 2>&1
+            then
+              echo "building the image $tag (Android API $ANDROID_API, once per Docker host)"
+              docker build --build-arg "ANDROID_API=$ANDROID_API" --build-arg "ANDROID_VERSION=$version" -t "$tag" "$dir" > /dev/null \
+                || { docker network rm "$lock" > /dev/null 2>&1; echo "::error::build of $tag failed"; return 1; }
+            fi
+            docker network rm "$lock" > /dev/null 2>&1 || true
+          fi
+          IMAGE=$tag
+          echo "emulators on Android API $ANDROID_API: image $IMAGE"
+        }
+        [ "$ANDROID_API" != '34' ] && { build_api_image || exit 1; }
         [ "$SNAPSHOT" == 'true' ] && { warm_image || true; }
 
         names=()
