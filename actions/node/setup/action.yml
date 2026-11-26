@@ -13,10 +13,11 @@ inputs:
   cache:
     required: false
     default: 'false'
-    description: >
-      'true' saves and restores the download cache of the package manager (npm/pnpm/yarn) in GitHub Actions caches,
-      keyed on the lockfile (ignored when the project has none). Any other value saves no cache (default).
-      Each ref, pull requests included, saves its own copy.
+    description: "'true' caches the download cache of the package manager (npm/pnpm/yarn) in GitHub Actions caches, keyed on the lockfile (ignored without a lockfile)."
+  cache-node-modules:
+    required: false
+    default: 'false'
+    description: "'true' caches the node_modules of the workspace in GitHub Actions caches, under a key made of the runner OS and architecture, manager, workspace, node version and lockfile content (ignored without a lockfile; `npm ci` deletes what was restored)."
   artifactory-user:
     description: user use to connect at jfrog
     required: false
@@ -113,3 +114,10 @@ runs:
           echo //${{ inputs.artifactory-url }}/artifactory/npm-releases-local:_auth=${AUTH}
           echo //${{ inputs.artifactory-url }}/artifactory/node:_auth=${AUTH}
         } >> ~/.npmrc
+
+    - name: cache node_modules
+      if: ${{ inputs.cache-node-modules == 'true' && steps.manager.outputs.lockfile != '' }}
+      uses: actions/cache@v5
+      with:
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.manager.outputs.value }}-${{ inputs.workspace }}-${{ steps.setup-node-version.outputs.node-version }}-${{ hashFiles(steps.manager.outputs.lockfile) }}
+        path: ${{ inputs.workspace }}/node_modules
