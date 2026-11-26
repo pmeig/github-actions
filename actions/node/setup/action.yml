@@ -7,10 +7,17 @@ inputs:
     description: version node do you want to setup
     required: false
   branch:
-    required: true
-    description: ''
-
-
+    required: false
+    default: ''
+    description: unused, kept so that existing callers passing it stay valid
+  cache:
+    required: false
+    default: 'false'
+    description: "'true' caches the download cache of the package manager (npm/pnpm/yarn) in GitHub Actions caches, keyed on the lockfile (ignored without a lockfile); setup-node saves one per ref, pull requests included."
+  cache-node-modules:
+    required: false
+    default: 'false'
+    description: "'true' caches the node_modules of the workspace in GitHub Actions caches, under a key made of the runner OS and architecture, manager, node version, workspace and lockfile content (ignored without a lockfile; `npm ci` deletes what was restored); pull requests only restore it, other events keep one per ref (needs the permission `actions: write` to delete the older ones)."
   artifactory-user:
     description: user use to connect at jfrog
     required: false
@@ -43,7 +50,7 @@ runs:
       id: manager
       with:
         workspace: ${{ inputs.workspace }}
-    # the package manager must be installed before setup-node: `cache: <manager>` runs it
+    # the package manager must be installed before setup-node: with the input `cache`, `cache: <manager>` runs it
     # (`pnpm store path`, `yarn cache dir`) to find the cache directory
     # the self-installer of pnpm/action-setup runs `npm`: the one bundled with some self-hosted runners
     # (externals/node24) is broken ("Cannot find module '../lib/cli.js'"), so put a working node first in the PATH
@@ -52,6 +59,7 @@ runs:
       uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.version }}
+        package-manager-cache: false
     # pnpm project: a working unzip first in the PATH of the following steps (runner/unzip: the unzip of the
     # self-hosted runners is a tar wrapper without -q), so the jobs do not need their own unzip step
     - name: unzip for the pnpm installer
@@ -71,14 +79,17 @@ runs:
       shell: bash
       run: |
         npm i -g yarn
-    # the cache of setup-node needs a lockfile ("Some specified paths were not resolved, unable to cache
+    # no GitHub Actions cache unless the input `cache` is 'true'. `package-manager-cache: false` only stops the
+    # automatic cache of setup-node (packageManager field of the root package.json), not an explicit `cache`.
+    # The cache of setup-node needs a lockfile ("Some specified paths were not resolved, unable to cache
     # dependencies"): a project without one gets no cache instead of a failure
     - uses: actions/setup-node@v6
       id: setup-node-version
       with:
         node-version: ${{ inputs.version }}
-        cache: ${{ steps.manager.outputs.lockfile != '' && steps.manager.outputs.value || '' }}
-        cache-dependency-path: ${{ steps.manager.outputs.lockfile }}
+        package-manager-cache: false
+        cache: ${{ inputs.cache == 'true' && steps.manager.outputs.lockfile != '' && steps.manager.outputs.value || '' }}
+        cache-dependency-path: ${{ inputs.cache == 'true' && steps.manager.outputs.lockfile || '' }}
     - name: remote
       shell: bash
       if: ${{ inputs.remote-token != '' }}
@@ -104,8 +115,37 @@ runs:
           echo //${{ inputs.artifactory-url }}/artifactory/node:_auth=${AUTH}
         } >> ~/.npmrc
 
-    - name: cache node_modules
+    - name: cache key
+      id: modules-key
+      if: ${{ inputs.cache-node-modules == 'true' && steps.manager.outputs.lockfile != '' }}
+      shell: bash
+      env:
+        PREFIX: node-modules|${{ runner.os }}|${{ runner.arch }}|${{ steps.manager.outputs.value }}|node-${{ inputs.version }}|${{ inputs.workspace }}|
+        HASH: ${{ hashFiles(steps.manager.outputs.lockfile) }}
+      run: |
+        echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+        echo "key=$PREFIX$HASH" >> "$GITHUB_OUTPUT"
+    # pull request events only read; the other events write, then keep one entry of this prefix on their ref
+    - name: restore cache
+      if: ${{ inputs.cache-node-modules == 'true' && steps.manager.outputs.lockfile != '' && startsWith(github.event_name, 'pull_request') }}
+      uses: actions/cache/restore@v5
+      with:
+        key: ${{ steps.modules-key.outputs.key }}
+        restore-keys: ${{ steps.modules-key.outputs.prefix }}
+        path: ${{ inputs.workspace }}/node_modules
+    - name: apply cache
+      if: ${{ inputs.cache-node-modules == 'true' && steps.manager.outputs.lockfile != '' && !startsWith(github.event_name, 'pull_request') }}
       uses: actions/cache@v5
       with:
-        key: ${{ steps.manager.outputs.value }}-${{ inputs.branch }}
+        key: ${{ steps.modules-key.outputs.key }}
+        restore-keys: ${{ steps.modules-key.outputs.prefix }}
         path: ${{ inputs.workspace }}/node_modules
+    - name: delete the older caches of this ref
+      if: ${{ inputs.cache-node-modules == 'true' && steps.manager.outputs.lockfile != '' && !startsWith(github.event_name, 'pull_request') }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        CACHE_PREFIX: ${{ steps.modules-key.outputs.prefix }}
+        CACHE_KEY: ${{ steps.modules-key.outputs.key }}
+      run: bash '${{ github.action_path }}/../../cache/prune.sh'
