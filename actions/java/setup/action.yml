@@ -4,8 +4,16 @@ description: install java and prepare cache and settings
 inputs:
   branch:
     required: false
-    description: branch name use to cache repository
+    description: branch name, part of the key of `cache-repository`
     default: ''
+  cache:
+    required: false
+    default: 'false'
+    description: "'true' caches the Maven dependencies in GitHub Actions caches through `cache: maven` of actions/setup-java."
+  cache-repository:
+    required: false
+    default: 'false'
+    description: "'true' caches the local Maven repository in GitHub Actions caches, under a key made of the runner OS and architecture, branch and content of the pom.xml files."
   java:
     required: false
     default: '26'
@@ -31,7 +39,7 @@ runs:
       with:
         java-version: ${{ inputs.java }}
         distribution: 'temurin'
-        cache: maven
+        cache: ${{ inputs.cache == 'true' && 'maven' || '' }}
     - name: add configuration maven to create server to deploy
       uses: pmeig/github-actions/actions/java/setup/settings@main
       if: ${{ inputs.artifactory-user != '' && inputs.artifactory-password != '' }}
@@ -41,13 +49,13 @@ runs:
         artifactory-url: ${{ inputs.artifactory-url }}
     - name: find repository localization
       uses: pmeig/github-actions/actions/java/maven/read@main
-      if: ${{ inputs.branch != '' }}
+      if: ${{ inputs.cache-repository == 'true' }}
       id: path
       with:
         expression: settings.localRepository
     - name: apply cache
       uses: actions/cache@v5
-      if: ${{ inputs.branch != '' }}
+      if: ${{ inputs.cache-repository == 'true' }}
       with:
-        key: mvn-${{ inputs.branch }}
+        key: mvn-${{ runner.os }}-${{ runner.arch }}-${{ inputs.branch }}-${{ hashFiles('**/pom.xml') }}
         path: ${{ steps.path.outputs.value }}
