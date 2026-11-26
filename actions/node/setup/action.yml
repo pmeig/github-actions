@@ -7,10 +7,16 @@ inputs:
     description: version node do you want to setup
     required: false
   branch:
-    required: true
-    description: ''
-
-
+    required: false
+    default: ''
+    description: unused, kept so that existing callers passing it stay valid
+  cache:
+    required: false
+    default: 'false'
+    description: >
+      'true' saves and restores the download cache of the package manager (npm/pnpm/yarn) in GitHub Actions caches,
+      keyed on the lockfile (ignored when the project has none). Any other value saves no cache (default).
+      Each ref, pull requests included, saves its own copy.
   artifactory-user:
     description: user use to connect at jfrog
     required: false
@@ -43,7 +49,7 @@ runs:
       id: manager
       with:
         workspace: ${{ inputs.workspace }}
-    # the package manager must be installed before setup-node: `cache: <manager>` runs it
+    # the package manager must be installed before setup-node: with the input `cache`, `cache: <manager>` runs it
     # (`pnpm store path`, `yarn cache dir`) to find the cache directory
     # the self-installer of pnpm/action-setup runs `npm`: the one bundled with some self-hosted runners
     # (externals/node24) is broken ("Cannot find module '../lib/cli.js'"), so put a working node first in the PATH
@@ -52,6 +58,7 @@ runs:
       uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.version }}
+        package-manager-cache: false
     # pnpm project: a working unzip first in the PATH of the following steps (runner/unzip: the unzip of the
     # self-hosted runners is a tar wrapper without -q), so the jobs do not need their own unzip step
     - name: unzip for the pnpm installer
@@ -71,14 +78,17 @@ runs:
       shell: bash
       run: |
         npm i -g yarn
-    # the cache of setup-node needs a lockfile ("Some specified paths were not resolved, unable to cache
+    # no GitHub Actions cache unless the input `cache` is 'true'. `package-manager-cache: false` only stops the
+    # automatic cache of setup-node (packageManager field of the root package.json), not an explicit `cache`.
+    # The cache of setup-node needs a lockfile ("Some specified paths were not resolved, unable to cache
     # dependencies"): a project without one gets no cache instead of a failure
     - uses: actions/setup-node@v6
       id: setup-node-version
       with:
         node-version: ${{ inputs.version }}
-        cache: ${{ steps.manager.outputs.lockfile != '' && steps.manager.outputs.value || '' }}
-        cache-dependency-path: ${{ steps.manager.outputs.lockfile }}
+        package-manager-cache: false
+        cache: ${{ inputs.cache == 'true' && steps.manager.outputs.lockfile != '' && steps.manager.outputs.value || '' }}
+        cache-dependency-path: ${{ inputs.cache == 'true' && steps.manager.outputs.lockfile || '' }}
     - name: remote
       shell: bash
       if: ${{ inputs.remote-token != '' }}
@@ -103,9 +113,3 @@ runs:
           echo //${{ inputs.artifactory-url }}/artifactory/npm-releases-local:_auth=${AUTH}
           echo //${{ inputs.artifactory-url }}/artifactory/node:_auth=${AUTH}
         } >> ~/.npmrc
-
-    - name: cache node_modules
-      uses: actions/cache@v5
-      with:
-        key: ${{ steps.manager.outputs.value }}-${{ inputs.branch }}
-        path: ${{ inputs.workspace }}/node_modules
