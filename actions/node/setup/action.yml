@@ -13,11 +13,11 @@ inputs:
   cache:
     required: false
     default: 'false'
-    description: "'true' caches the download cache of the package manager (npm/pnpm/yarn) in GitHub Actions caches, keyed on the lockfile (ignored without a lockfile)."
+    description: "'true' caches the download cache of the package manager (npm/pnpm/yarn) in GitHub Actions caches, keyed on the lockfile (ignored without a lockfile); setup-node saves one per ref, pull requests included."
   cache-node-modules:
     required: false
     default: 'false'
-    description: "'true' caches the node_modules of the workspace in GitHub Actions caches, under a key made of the runner OS and architecture, manager, workspace, node version and lockfile content (ignored without a lockfile; `npm ci` deletes what was restored)."
+    description: "'true' caches the node_modules of the workspace in GitHub Actions caches, under a key made of the runner OS and architecture, manager, node version, workspace and lockfile content (ignored without a lockfile; `npm ci` deletes what was restored); pull requests only restore it, other events keep one per ref (needs the permission `actions: write` to delete the older ones)."
   artifactory-user:
     description: user use to connect at jfrog
     required: false
@@ -115,9 +115,37 @@ runs:
           echo //${{ inputs.artifactory-url }}/artifactory/node:_auth=${AUTH}
         } >> ~/.npmrc
 
-    - name: cache node_modules
+    - name: cache key
+      id: modules-key
       if: ${{ inputs.cache-node-modules == 'true' && steps.manager.outputs.lockfile != '' }}
+      shell: bash
+      env:
+        PREFIX: node-modules|${{ runner.os }}|${{ runner.arch }}|${{ steps.manager.outputs.value }}|node-${{ inputs.version }}|${{ inputs.workspace }}|
+        HASH: ${{ hashFiles(steps.manager.outputs.lockfile) }}
+      run: |
+        echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+        echo "key=$PREFIX$HASH" >> "$GITHUB_OUTPUT"
+    # pull request events only read; the other events write, then keep one entry of this prefix on their ref
+    - name: restore cache
+      if: ${{ inputs.cache-node-modules == 'true' && steps.manager.outputs.lockfile != '' && startsWith(github.event_name, 'pull_request') }}
+      uses: actions/cache/restore@v5
+      with:
+        key: ${{ steps.modules-key.outputs.key }}
+        restore-keys: ${{ steps.modules-key.outputs.prefix }}
+        path: ${{ inputs.workspace }}/node_modules
+    - name: apply cache
+      if: ${{ inputs.cache-node-modules == 'true' && steps.manager.outputs.lockfile != '' && !startsWith(github.event_name, 'pull_request') }}
       uses: actions/cache@v5
       with:
-        key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.manager.outputs.value }}-${{ inputs.workspace }}-${{ steps.setup-node-version.outputs.node-version }}-${{ hashFiles(steps.manager.outputs.lockfile) }}
+        key: ${{ steps.modules-key.outputs.key }}
+        restore-keys: ${{ steps.modules-key.outputs.prefix }}
         path: ${{ inputs.workspace }}/node_modules
+    - name: delete the older caches of this ref
+      if: ${{ inputs.cache-node-modules == 'true' && steps.manager.outputs.lockfile != '' && !startsWith(github.event_name, 'pull_request') }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        CACHE_PREFIX: ${{ steps.modules-key.outputs.prefix }}
+        CACHE_KEY: ${{ steps.modules-key.outputs.key }}
+      run: bash '${{ github.action_path }}/../../cache/prune.sh'

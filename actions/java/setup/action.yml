@@ -4,16 +4,16 @@ description: install java and prepare cache and settings
 inputs:
   branch:
     required: false
-    description: branch name, part of the key of `cache-repository`
+    description: unused, kept so that existing callers passing it stay valid
     default: ''
   cache:
     required: false
     default: 'false'
-    description: "'true' caches the Maven dependencies in GitHub Actions caches through `cache: maven` of actions/setup-java."
+    description: "'true' caches the Maven dependencies in GitHub Actions caches through `cache: maven` of actions/setup-java; setup-java saves one per ref, pull requests included."
   cache-repository:
     required: false
     default: 'false'
-    description: "'true' caches the local Maven repository in GitHub Actions caches, under a key made of the runner OS and architecture, branch and content of the pom.xml files."
+    description: "'true' caches the local Maven repository in GitHub Actions caches, under a key made of the runner OS and architecture and the content of the pom.xml files; pull requests only restore it, other events keep one per ref (needs the permission `actions: write` to delete the older ones)."
   java:
     required: false
     default: '26'
@@ -53,9 +53,37 @@ runs:
       id: path
       with:
         expression: settings.localRepository
-    - name: apply cache
-      uses: actions/cache@v5
+    - name: cache key
+      id: repository-key
       if: ${{ inputs.cache-repository == 'true' }}
+      shell: bash
+      env:
+        PREFIX: mvn-repository|${{ runner.os }}|${{ runner.arch }}|
+        HASH: ${{ hashFiles('**/pom.xml') }}
+      run: |
+        echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+        echo "key=$PREFIX$HASH" >> "$GITHUB_OUTPUT"
+    # pull request events only read; the other events write, then keep one entry of this prefix on their ref
+    - name: restore cache
+      if: ${{ inputs.cache-repository == 'true' && startsWith(github.event_name, 'pull_request') }}
+      uses: actions/cache/restore@v5
       with:
-        key: mvn-${{ runner.os }}-${{ runner.arch }}-${{ inputs.branch }}-${{ hashFiles('**/pom.xml') }}
+        key: ${{ steps.repository-key.outputs.key }}
+        restore-keys: ${{ steps.repository-key.outputs.prefix }}
         path: ${{ steps.path.outputs.value }}
+    - name: apply cache
+      if: ${{ inputs.cache-repository == 'true' && !startsWith(github.event_name, 'pull_request') }}
+      uses: actions/cache@v5
+      with:
+        key: ${{ steps.repository-key.outputs.key }}
+        restore-keys: ${{ steps.repository-key.outputs.prefix }}
+        path: ${{ steps.path.outputs.value }}
+    - name: delete the older caches of this ref
+      if: ${{ inputs.cache-repository == 'true' && !startsWith(github.event_name, 'pull_request') }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        CACHE_PREFIX: ${{ steps.repository-key.outputs.prefix }}
+        CACHE_KEY: ${{ steps.repository-key.outputs.key }}
+      run: bash '${{ github.action_path }}/../../cache/prune.sh'
